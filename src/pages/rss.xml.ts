@@ -5,9 +5,10 @@ import type { APIContext } from 'astro';
 export const prerender = true;
 
 export async function GET(context: APIContext) {
-  const posts = (await getCollection('posts', ({ data }) => !data.draft)).sort(
-    (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf(),
-  );
+  const posts = (await getCollection('posts', ({ data }) => {
+    if (!import.meta.env.PROD) return true;
+    return !data.draft && data.pubDate <= new Date();
+  })).sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
 
   return rss({
     title: 'Chiaroscuro Joven',

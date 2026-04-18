@@ -1,0 +1,45 @@
+name: Scheduled Publish
+
+# Triggers a fresh Vercel production build at a scheduled time, so that
+# blog posts with future `pubDate` values go live without manual intervention.
+#
+# How it works:
+#   - Each blog post's filter gates rendering on `pubDate <= new Date()`,
+#     evaluated at build time.
+#   - When a new build runs after the scheduled pubDate, the post clears the
+#     gate and renders. Until then, it's in the repo but invisible on the site.
+#   - This workflow fires a Vercel Deploy Hook to trigger that build.
+#
+# For each scheduled post, update the cron below to the target UTC time.
+# (GitHub Actions cron uses UTC; US EDT = UTC-4, US EST = UTC-5.)
+#
+# Caveats:
+#   - GitHub Actions scheduled workflows can be delayed by 15+ min during
+#     platform peak load. Schedule slightly earlier if you need a tight
+#     time-to-live SLA.
+#   - Scheduled workflows only run on the default branch.
+#   - The cron syntax below has no year field, so it will fire annually on
+#     the same calendar date. After a scheduled post goes live, re-firing is
+#     a harmless no-op rebuild, but you can delete or edit the cron once
+#     the specific schedule is no longer relevant.
+
+on:
+  schedule:
+    # 19:00 UTC on April 19 = 3:00 PM EDT (US Eastern, Daylight Saving active).
+    # Scheduled for "Possibility is Perception. Capability is Reality." post.
+    - cron: '0 19 19 4 *'
+  workflow_dispatch:
+
+jobs:
+  trigger-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Vercel Deploy Hook
+        run: |
+          if [ -z "${{ secrets.VERCEL_DEPLOY_HOOK }}" ]; then
+            echo "VERCEL_DEPLOY_HOOK secret is not set."
+            echo "Create a Deploy Hook in Vercel (Settings > Git > Deploy Hooks)"
+            echo "and add the URL as a repo secret named VERCEL_DEPLOY_HOOK."
+            exit 1
+          fi
+          curl -fsSL -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
