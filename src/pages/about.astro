@@ -1,9 +1,11 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+
+export const prerender = true;
 ---
 
 <BaseLayout title="About" description="About Chiaroscuro Joven — who is behind the site and why it exists.">
-  <section class="container container--reading">
+  <section class="container container--reading prose">
     <p class="section-label">About</p>
     <h1>Light from darkness</h1>
 

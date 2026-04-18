@@ -1,6 +1,8 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 
+export const prerender = true;
+
 const collections = [
   {
     slug: 'chiaroscuro',
@@ -57,7 +59,18 @@ const collections = [
     gap: 24px;
   }
 
+  h1 {
+    font-family: var(--cj-serif);
+    font-weight: 600;
+    color: var(--cj-pearl);
+    font-size: clamp(2.5rem, 6vw, 4.5rem);
+    letter-spacing: 0.04em;
+  }
+
   .collection-title {
+    font-family: var(--cj-serif);
+    font-weight: 600;
+    color: var(--cj-pearl);
     font-size: 1.75rem;
     margin-bottom: 4px;
   }

@@ -11,4 +11,35 @@ const posts = defineCollection({
   }),
 });
 
-export const collections = { posts };
+const gallery = defineCollection({
+  loader: glob({ pattern: '**/*.yaml', base: './src/content/gallery' }),
+  schema: ({ image }) =>
+    z.object({
+      title: z.string(),
+      subtitle: z.string(),
+      description: z.string(),
+      paintings: z.array(
+        z.object({
+          number: z.string(),
+          section: z.string().optional(),
+          title: z.string(),
+          meta: z.string(),
+          image: image(),
+          alt: z.string(),
+          description: z.string(),
+          chiaroscuroNote: z.string(),
+          descriptionEnd: z.string(),
+        }),
+      ),
+      sources: z
+        .array(
+          z.object({
+            name: z.string(),
+            url: z.string().url(),
+          }),
+        )
+        .optional(),
+    }),
+});
+
+export const collections = { posts, gallery };

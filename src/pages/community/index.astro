@@ -1,5 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export const prerender = true;
 ---
 
 <BaseLayout title="Community" description="Chiaroscuro Joven's community space — opening soon.">
@@ -8,16 +10,24 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h1>Opening soon</h1>
     <p class="placeholder">
       A space to think alongside others — threaded discussions on art, literature, film, and
-      whatever else catches the light. Being built deliberately, piece by piece. Per
-      IMPL-0001 §5.6-§5.13 if you're into that kind of thing.
+      whatever else catches the light. Built piece by piece, without haste.
     </p>
     <p class="placeholder">
-      When the doors open, signup will be an email magic link — no passwords to forget.
+      When the doors open, signup will be an email magic link. No passwords, no tracking, no
+      algorithmic feed.
     </p>
   </section>
 </BaseLayout>
 
 <style>
+  h1 {
+    font-family: var(--cj-serif);
+    font-weight: 600;
+    color: var(--cj-pearl);
+    font-size: clamp(2.5rem, 6vw, 4.5rem);
+    letter-spacing: 0.04em;
+  }
+
   .placeholder {
     color: var(--cj-muted);
     margin-top: 20px;

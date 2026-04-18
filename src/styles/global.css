@@ -1,8 +1,9 @@
 /* Chiaroscuro Joven — global styles
  *
- * Palette, typography, and base rules derived from the chiaroscuro-gallery.html
- * brand reference. Cormorant Garamond + Inter, deep black ground, warm cream
- * text, gold accents. Light from darkness.
+ * Baseline only: reset, body typography, neutral element defaults, and layout
+ * utilities (.hero, .container, .section-label). Publication-prose styling
+ * lives under the `.prose` class so forum UI, admin affordances, and future
+ * interactive surfaces don't inherit essay typography.
  */
 
 @import '@fontsource/cormorant-garamond/400-italic.css';
@@ -61,64 +62,20 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Typography defaults */
+/* Neutral element defaults — no publication styling, just sensible baselines. */
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--cj-serif);
-  font-weight: 600;
-  color: var(--cj-pearl);
   line-height: 1.2;
 }
 
-h1 { font-size: clamp(2.5rem, 6vw, 4.5rem); letter-spacing: 0.04em; }
-h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: 0.02em; }
-h3 { font-size: clamp(1.3rem, 2.5vw, 1.75rem); }
-h4 { font-size: 1.2rem; }
-
-p {
-  max-width: var(--cj-reading-width);
-}
-
 a {
-  color: var(--cj-gold);
+  color: inherit;
   text-decoration: none;
   transition: color 0.2s ease;
 }
 
-a:hover {
-  color: var(--cj-gold-bright);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-strong {
-  color: var(--cj-pearl);
-  font-weight: 400;
-}
-
-em {
-  color: var(--cj-gold);
-  font-style: italic;
-  font-family: var(--cj-serif);
-}
-
 code, pre {
   font-family: 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
-  background: var(--cj-ink);
-  color: var(--cj-cream);
-  border-radius: 3px;
-}
-
-code { padding: 2px 6px; font-size: 0.9em; }
-pre { padding: 16px 20px; overflow-x: auto; border: 1px solid var(--cj-shadow); }
-pre code { background: transparent; padding: 0; }
-
-hr {
-  width: 60px;
-  height: 1px;
-  background: var(--cj-dim);
-  border: none;
-  margin: 60px auto;
 }
 
 /* Section label — small, uppercase, letter-spaced. Used throughout. */
@@ -144,6 +101,8 @@ hr {
 }
 
 .hero h1 {
+  font-family: var(--cj-serif);
+  color: var(--cj-pearl);
   font-weight: 600;
   font-size: clamp(3rem, 8vw, 6rem);
   letter-spacing: 0.08em;
@@ -168,6 +127,12 @@ hr {
   padding-top: 24px;
 }
 
+.hero .definition em {
+  font-family: var(--cj-serif);
+  font-style: italic;
+  color: var(--cj-gold);
+}
+
 /* Main container */
 .container {
   max-width: var(--cj-max-width);
@@ -177,6 +142,112 @@ hr {
 
 .container--reading {
   max-width: var(--cj-reading-width);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * .prose — publication reading styles.
+ *
+ * Apply to essay/long-form containers (about page, post bodies, any future
+ * long-form content). UI surfaces — forum cards, forms, admin controls —
+ * should NOT use this class; they get neutral element defaults instead.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+  font-family: var(--cj-serif);
+  font-weight: 600;
+  color: var(--cj-pearl);
+}
+
+.prose h1 {
+  font-size: clamp(2.5rem, 6vw, 4.5rem);
+  letter-spacing: 0.04em;
+}
+
+.prose h2 {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  letter-spacing: 0.02em;
+  margin: 48px 0 16px;
+}
+
+.prose h3 {
+  font-size: clamp(1.3rem, 2.5vw, 1.75rem);
+  margin: 40px 0 12px;
+}
+
+.prose h4 {
+  font-size: 1.2rem;
+}
+
+.prose p {
+  max-width: var(--cj-reading-width);
+  margin-bottom: 24px;
+}
+
+.prose a {
+  color: var(--cj-gold);
+}
+
+.prose a:hover {
+  color: var(--cj-gold-bright);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.prose strong {
+  color: var(--cj-pearl);
+  font-weight: 400;
+}
+
+.prose em {
+  color: var(--cj-gold);
+  font-style: italic;
+  font-family: var(--cj-serif);
+}
+
+.prose code,
+.prose pre {
+  background: var(--cj-ink);
+  color: var(--cj-cream);
+  border-radius: 3px;
+}
+
+.prose code {
+  padding: 2px 6px;
+  font-size: 0.9em;
+}
+
+.prose pre {
+  padding: 16px 20px;
+  overflow-x: auto;
+  border: 1px solid var(--cj-shadow);
+}
+
+.prose pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.prose blockquote {
+  border-left: 2px solid var(--cj-gold);
+  padding-left: 20px;
+  margin: 24px 0;
+  color: var(--cj-muted);
+  font-style: italic;
+  font-family: var(--cj-serif);
+  font-size: 1.15rem;
+}
+
+.prose hr {
+  width: 60px;
+  height: 1px;
+  background: var(--cj-dim);
+  border: none;
+  margin: 60px auto;
 }
 
 /* Responsive */

@@ -1,105 +1,25 @@
 ---
+import { getEntry } from 'astro:content';
+import { Image } from 'astro:assets';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 
-const paintings = [
-  {
-    section: 'Caravaggio — The Revolutionary',
-    number: 'I',
-    title: 'Salome with the Head of John the Baptist',
-    meta: 'Caravaggio — c. 1607 · Oil on canvas · National Gallery, London',
-    img: 'https://www.virtualartacademy.com/wp-content/uploads/2021/03/Caravaggio-Salome.jpg',
-    alt: 'Salome with the Head of John the Baptist by Caravaggio',
-    description: `Caravaggio invented modern drama in paint. Here, Salome receives the severed head of John the Baptist on a silver platter, her expression not triumphant but haunted.`,
-    chiaroscuroNote: `The figures emerge from near-total blackness, lit by a single invisible source from the upper left — Caravaggio's signature move.`,
-    descriptionEnd: `The darkness isn't just background; it's a void that swallows everything except the moral weight of the moment. This is chiaroscuro weaponized.`,
-  },
-  {
-    number: 'II',
-    title: 'Saint Jerome Writing',
-    meta: 'Caravaggio — c. 1605–06 · Oil on canvas · Galleria Borghese, Rome',
-    img: 'https://www.portraitflip.com/wp-content/uploads/2023/06/Paintings-by-Caravaggio-Saint-Jerome-Writing.jpg',
-    alt: 'Saint Jerome Writing by Caravaggio',
-    description: `An elderly scholar hunches over his work, a skull resting on the table as a memento mori.`,
-    chiaroscuroNote: `The red robe catches the light like embers in darkness — notice how Caravaggio uses the warm tone against the cool black to create a sense of depth that's almost three-dimensional.`,
-    descriptionEnd: `The rest of the canvas is swallowed by shadow, focusing your entire attention on this solitary act of writing. It's intimate, quiet, and somehow monumental.`,
-  },
-  {
-    number: 'III',
-    title: 'Narcissus',
-    meta: "Caravaggio — c. 1597–99 · Oil on canvas · Galleria Nazionale d'Arte Antica, Rome",
-    img: 'https://www.portraitflip.com/wp-content/uploads/2023/05/Narcissus.jpg',
-    alt: 'Narcissus by Caravaggio',
-    description: `A young man gazes at his own reflection in dark water, forming a near-perfect circle of self-obsession.`,
-    chiaroscuroNote: `The chiaroscuro here is structural — the lit figure and its dark reflection create a closed loop, light meeting shadow at the water's surface.`,
-    descriptionEnd: `It's one of the most elegant uses of the technique because the contrast isn't just aesthetic, it's the whole metaphor: beauty and its shadow, consciousness and the void staring back.`,
-  },
-  {
-    section: 'Georges de La Tour — The Candlelight Poet',
-    number: 'IV',
-    title: 'The Penitent Magdalene',
-    meta: 'Georges de La Tour — c. 1625–50 · Oil on canvas · The Met, New York',
-    img: 'https://drawpaintacademy.com/wp-content/uploads/2019/03/Georges-de-La-Tour-The-Penitent-Magdalene-1625-1650.jpg',
-    alt: 'The Penitent Magdalene by Georges de La Tour',
-    description: `Where Caravaggio used invisible light sources to create drama, La Tour put the candle right there in the painting. Mary Magdalene sits in profile, contemplating a mirror by candlelight — a skull resting in her lap.`,
-    chiaroscuroNote: `The single candle creates a warm, intimate glow that barely pushes back the surrounding darkness. La Tour's chiaroscuro is quieter than Caravaggio's, more meditative — less "spotlight at a crime scene," more "3 AM with your thoughts."`,
-    descriptionEnd: `The mirror reflects the flame, doubling the light source in a way that deepens the silence.`,
-  },
-  {
-    number: 'V',
-    title: 'Magdalene with the Smoking Flame',
-    meta: 'Georges de La Tour — c. 1640 · Oil on canvas · LACMA, Los Angeles',
-    img: 'https://mydailyartdisplay.uk/wp-content/uploads/2014/06/magdalen-with-the-smoking-flame-by-georges-de-la-tour-1640.jpg',
-    alt: 'Magdalene with the Smoking Flame by Georges de La Tour',
-    description: `La Tour returned to Magdalene obsessively, painting her at least four times. In this version, she rests her chin on her hand, staring into a candle flame with a skull cradled in her other arm.`,
-    chiaroscuroNote: `The genius is in the skin — look at how the candlelight renders her arm and shoulder in warm golden tones that fall off into cool shadow. The flame itself is partially obscured by her hand, creating layered zones of light and dark.`,
-    descriptionEnd: `An art critic once wrote that La Tour's candles give the sense of a soul in trance.`,
-  },
-  {
-    number: 'VI',
-    title: "Christ in the Carpenter's Shop",
-    meta: 'Georges de La Tour — c. 1645 · Oil on canvas · Musée du Louvre, Paris',
-    img: 'https://mydailyartdisplay.uk/wp-content/uploads/2014/06/christ-in-the-carpenters-shop-by-georges-de-la-tour-1645.jpg',
-    alt: "Christ in the Carpenter's Shop by Georges de La Tour",
-    description: `A young Jesus holds a candle for his father Joseph, who works wood by its light. It could be any father-son workshop scene — except for the transcendent quality of the light.`,
-    chiaroscuroNote: `The child's face is fully lit, almost glowing from within, while Joseph's face catches the light from below, creating an upward glow that reverses the usual top-down illumination. The candle flame passes through the boy's translucent fingers — a detail so tender and technically brilliant it stops you cold.`,
-    descriptionEnd: `This is chiaroscuro as theology: the child literally bringing light into darkness.`,
-  },
-  {
-    section: 'Artemisia Gentileschi — The Fierce One',
-    number: 'VII',
-    title: 'Self-Portrait as the Allegory of Painting (La Pittura)',
-    meta: 'Artemisia Gentileschi — c. 1638–39 · Oil on canvas · Royal Collection, London',
-    img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Self-portrait_as_the_Allegory_of_Painting_%28La_Pittura%29_-_Artemisia_Gentileschi.jpg/960px-Self-portrait_as_the_Allegory_of_Painting_%28La_Pittura%29_-_Artemisia_Gentileschi.jpg',
-    alt: 'Self-Portrait as the Allegory of Painting by Artemisia Gentileschi',
-    description: `Artemisia painted herself as the physical embodiment of Painting itself — something no male artist could do, since La Pittura was traditionally depicted as a woman.`,
-    chiaroscuroNote: `The chiaroscuro here is confident and structural: her face and arm catch a strong light from the left, while her body twists into shadow. The dark background pushes her forward, making the act of painting feel almost violent in its intensity.`,
-    descriptionEnd: `Trained by her father Orazio (himself a Caravaggio follower), Artemisia took the technique and made it her own — less about atmosphere, more about power.`,
-  },
-  {
-    number: 'VIII',
-    title: 'Judith Slaying Holofernes',
-    meta: 'Artemisia Gentileschi — c. 1612–13 · Oil on canvas · Museo di Capodimonte, Naples',
-    img: 'https://mymodernmet.com/wp/wp-content/uploads/2020/07/artemisia-gentileschi-judith-beheading-holofernes-famous-baroque-paintings-3.jpeg',
-    alt: 'Judith Slaying Holofernes by Artemisia Gentileschi',
-    description: `This is the painting that made Artemisia's reputation — and it's not subtle. Judith and her maidservant pin down the Assyrian general Holofernes and saw through his neck. Where Caravaggio's version of this scene is almost balletic, Artemisia's is a physical struggle.`,
-    chiaroscuroNote: `The chiaroscuro is merciless: harsh light floods the white bedsheets and Judith's arms, while the background drops to black. Blood catches the light. There's no atmospheric softness — just stark illumination of a brutal act.`,
-    descriptionEnd: `Artemisia painted this shortly after surviving a rape and public trial. The intensity is not coincidental. This is chiaroscuro as catharsis.`,
-  },
-];
+export const prerender = true;
+
+const entry = await getEntry('gallery', 'chiaroscuro');
+if (!entry) {
+  throw new Error('Gallery entry "chiaroscuro" not found');
+}
+const { title, subtitle, description, paintings, sources } = entry.data;
 ---
 
 <BaseLayout
-  title="Chiaroscuro"
-  description="Caravaggio, La Tour, Gentileschi — and what their darkness teaches. A curated gallery from Chiaroscuro Joven."
+  title={title}
+  description={`${subtitle}. A curated gallery from Chiaroscuro Joven.`}
 >
   <section class="hero">
-    <h1>Chiaroscuro</h1>
-    <p class="subtitle">The art of summoning light from darkness</p>
-    <p class="definition">
-      From the Italian <em>chiaro</em> (light) + <em>scuro</em> (dark). A technique that uses
-      extreme contrasts between light and shadow to create depth, volume, and emotional intensity.
-      Pioneered in the Renaissance, perfected in the Baroque.
-    </p>
+    <h1>{title}</h1>
+    <p class="subtitle">{subtitle}</p>
+    <p class="definition" set:html={description}></p>
   </section>
 
   <div class="gallery">
@@ -113,7 +33,7 @@ const paintings = [
         )}
         <div class="painting" style={`animation-delay: ${0.1 + i * 0.05}s`}>
           <div class="painting-number">{p.number}</div>
-          <img src={p.img} alt={p.alt} loading="lazy" />
+          <Image src={p.image} alt={p.alt} loading="lazy" />
           <div class="painting-info">
             <div class="painting-title">{p.title}</div>
             <div class="painting-meta">{p.meta}</div>
@@ -130,15 +50,19 @@ const paintings = [
     ))}
   </div>
 
-  <section class="sources">
-    <p class="section-label">Sources</p>
-    <p>
-      <a href="https://drawpaintacademy.com/chiaroscuro/" target="_blank" rel="noopener">Draw Paint Academy</a>
-      · <a href="https://mymodernmet.com/chiaroscuro-painting-technique/" target="_blank" rel="noopener">My Modern Met</a>
-      · <a href="https://www.theartstory.org/artist/la-tour-georges-de/" target="_blank" rel="noopener">The Art Story</a>
-      · <a href="https://www.london-artcollege.co.uk/news/2023/08/artemisia-gentileschi-a-trailblazing-baroque-painter/" target="_blank" rel="noopener">London Art College</a>
-    </p>
-  </section>
+  {sources && sources.length > 0 && (
+    <section class="sources">
+      <p class="section-label">Sources</p>
+      <p>
+        {sources.map((source, i) => (
+          <>
+            {i > 0 && <> · </>}
+            <a href={source.url} target="_blank" rel="noopener">{source.name}</a>
+          </>
+        ))}
+      </p>
+    </section>
+  )}
 </BaseLayout>
 
 <style>
@@ -178,6 +102,7 @@ const paintings = [
 
   .painting img {
     width: 100%;
+    height: auto;
     border-radius: 4px;
     display: block;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
@@ -236,6 +161,15 @@ const paintings = [
   .sources p:last-child {
     font-size: 0.85rem;
     color: var(--cj-quiet);
+  }
+
+  .sources a {
+    color: var(--cj-gold);
+  }
+
+  .sources a:hover {
+    color: var(--cj-gold-bright);
+    text-decoration: underline;
   }
 
   @media (max-width: 600px) {

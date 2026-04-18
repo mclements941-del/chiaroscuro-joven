@@ -3,6 +3,8 @@ import { getCollection, render } from 'astro:content';
 import type { CollectionEntry } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 
+export const prerender = true;
+
 export async function getStaticPaths() {
   const posts = await getCollection('posts', ({ data }) => !data.draft);
   return posts.map((entry) => ({
@@ -33,7 +35,7 @@ const formatter = new Intl.DateTimeFormat('en-US', {
       </time>
       <h1>{entry.data.title}</h1>
     </header>
-    <div class="post-body">
+    <div class="prose post-body">
       <Content />
     </div>
   </article>
@@ -65,18 +67,19 @@ const formatter = new Intl.DateTimeFormat('en-US', {
     margin-bottom: 12px;
   }
 
+  /* Post title lives outside .prose so it doesn't inherit the h1 size clamp —
+     posts want a slightly smaller hero than the .prose default. */
   .post-header h1 {
+    font-family: var(--cj-serif);
+    font-weight: 600;
+    color: var(--cj-pearl);
     font-size: clamp(2rem, 5vw, 3rem);
     letter-spacing: 0.02em;
   }
 
-  .post-body :global(p) {
-    margin-bottom: 24px;
-    font-size: 1.05rem;
-    color: var(--cj-cream);
-  }
-
-  .post-body :global(p:first-of-type)::first-letter {
+  /* Gold drop-cap on the first paragraph of the post body. Scoped here so
+     other .prose containers (About, future gallery intros) don't inherit it. */
+  .post-body :global(p:first-of-type::first-letter) {
     font-family: var(--cj-serif);
     font-size: 3.5rem;
     color: var(--cj-gold-bright);
@@ -86,25 +89,8 @@ const formatter = new Intl.DateTimeFormat('en-US', {
     padding-top: 6px;
   }
 
-  .post-body :global(h2) {
-    margin: 48px 0 16px;
-  }
-
-  .post-body :global(h3) {
-    margin: 40px 0 12px;
-  }
-
-  .post-body :global(blockquote) {
-    border-left: 2px solid var(--cj-gold);
-    padding-left: 20px;
-    margin: 24px 0;
-    color: var(--cj-muted);
-    font-style: italic;
-    font-family: var(--cj-serif);
-    font-size: 1.15rem;
-  }
-
-  .post-body :global(hr) {
-    margin: 40px auto;
+  .post-body :global(p) {
+    font-size: 1.05rem;
+    color: var(--cj-cream);
   }
 </style>
