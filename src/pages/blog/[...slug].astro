@@ -1,0 +1,110 @@
+---
+import { getCollection, render } from 'astro:content';
+import type { CollectionEntry } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('posts', ({ data }) => !data.draft);
+  return posts.map((entry) => ({
+    params: { slug: entry.id },
+    props: { entry },
+  }));
+}
+
+type Props = { entry: CollectionEntry<'posts'> };
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+
+const formatter = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  timeZone: 'UTC',
+});
+---
+
+<BaseLayout title={entry.data.title} description={entry.data.description}>
+  <article class="container container--reading post">
+    <p class="section-label"><a href="/blog">← Blog</a></p>
+    <header class="post-header">
+      <time class="post-date" datetime={entry.data.pubDate.toISOString()}>
+        {formatter.format(entry.data.pubDate)}
+      </time>
+      <h1>{entry.data.title}</h1>
+    </header>
+    <div class="post-body">
+      <Content />
+    </div>
+  </article>
+</BaseLayout>
+
+<style>
+  .section-label a {
+    color: var(--cj-whisper);
+    text-decoration: none;
+    letter-spacing: 0.25em;
+  }
+
+  .section-label a:hover {
+    color: var(--cj-gold);
+    text-decoration: none;
+  }
+
+  .post-header {
+    margin-bottom: 48px;
+  }
+
+  .post-date {
+    font-family: var(--cj-sans);
+    font-size: 0.75rem;
+    color: var(--cj-whisper);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 12px;
+  }
+
+  .post-header h1 {
+    font-size: clamp(2rem, 5vw, 3rem);
+    letter-spacing: 0.02em;
+  }
+
+  .post-body :global(p) {
+    margin-bottom: 24px;
+    font-size: 1.05rem;
+    color: var(--cj-cream);
+  }
+
+  .post-body :global(p:first-of-type)::first-letter {
+    font-family: var(--cj-serif);
+    font-size: 3.5rem;
+    color: var(--cj-gold-bright);
+    float: left;
+    line-height: 0.9;
+    padding-right: 8px;
+    padding-top: 6px;
+  }
+
+  .post-body :global(h2) {
+    margin: 48px 0 16px;
+  }
+
+  .post-body :global(h3) {
+    margin: 40px 0 12px;
+  }
+
+  .post-body :global(blockquote) {
+    border-left: 2px solid var(--cj-gold);
+    padding-left: 20px;
+    margin: 24px 0;
+    color: var(--cj-muted);
+    font-style: italic;
+    font-family: var(--cj-serif);
+    font-size: 1.15rem;
+  }
+
+  .post-body :global(hr) {
+    margin: 40px auto;
+  }
+</style>

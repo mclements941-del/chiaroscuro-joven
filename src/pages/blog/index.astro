@@ -1,21 +1,109 @@
 ---
+import { getCollection } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const posts = (await getCollection('posts', ({ data }) => !data.draft)).sort(
+  (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf(),
+);
+
+const formatter = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  timeZone: 'UTC',
+});
 ---
 
-<BaseLayout title="Blog" description="Writing from Chiaroscuro Joven — weekly(ish) notes on art, ideas, and what inspires me.">
+<BaseLayout
+  title="Blog"
+  description="Writing from Chiaroscuro Joven — notes on art, ideas, and what inspires me."
+>
   <section class="container container--reading">
     <p class="section-label">Blog</p>
-    <h1>Not quite ready</h1>
-    <p class="placeholder">
-      The first post is still being composed in the dark. Check back soon.
+    <h1>Writing</h1>
+    <p class="intro">
+      Essays and notes. Weekly-ish when it flows, quieter when it doesn't.
     </p>
+
+    {posts.length === 0 ? (
+      <p class="placeholder">The first post is still being composed in the dark. Check back soon.</p>
+    ) : (
+      <ul class="post-list">
+        {posts.map((post) => (
+          <li class="post">
+            <a href={`/blog/${post.id}/`} class="post-link">
+              <time class="post-date" datetime={post.data.pubDate.toISOString()}>
+                {formatter.format(post.data.pubDate)}
+              </time>
+              <h2 class="post-title">{post.data.title}</h2>
+              <p class="post-description">{post.data.description}</p>
+            </a>
+          </li>
+        ))}
+      </ul>
+    )}
   </section>
 </BaseLayout>
 
 <style>
+  .intro {
+    color: var(--cj-muted);
+    margin: 16px 0 48px;
+    font-style: italic;
+    font-family: var(--cj-serif);
+  }
+
   .placeholder {
     color: var(--cj-muted);
     margin-top: 24px;
     font-size: 1.1rem;
+  }
+
+  .post-list {
+    list-style: none;
+  }
+
+  .post {
+    padding: 32px 0;
+    border-bottom: 1px solid var(--cj-ink);
+  }
+
+  .post:last-child {
+    border-bottom: none;
+  }
+
+  .post-link {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .post-link:hover {
+    text-decoration: none;
+  }
+
+  .post-link:hover .post-title {
+    color: var(--cj-gold-bright);
+  }
+
+  .post-date {
+    font-family: var(--cj-sans);
+    font-size: 0.75rem;
+    color: var(--cj-whisper);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .post-title {
+    font-size: 1.75rem;
+    margin-bottom: 8px;
+    transition: color 0.2s ease;
+  }
+
+  .post-description {
+    color: var(--cj-muted);
+    font-size: 0.95rem;
   }
 </style>
