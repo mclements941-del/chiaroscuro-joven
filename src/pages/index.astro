@@ -1,17 +1,61 @@
 ---
-
+import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
-</html>
+<BaseLayout>
+  <section class="hero">
+    <h1>Chiaroscuro</h1>
+    <p class="subtitle">The art of summoning light from darkness</p>
+    <p class="definition">
+      From the Italian <em>chiaro</em> (light) + <em>scuro</em> (dark). A technique that uses
+      extreme contrasts between light and shadow to create depth, volume, and emotional intensity.
+      Pioneered in the Renaissance, perfected in the Baroque — now a way to see.
+    </p>
+  </section>
+
+  <section class="container container--reading home-intro">
+    <p class="section-label">Recent</p>
+    <p class="intro-note">
+      This is a new place. A gallery of ideas, a field notebook of things that inspire. Blog,
+      curation, gallery, and — when the time is right — community. More soon.
+    </p>
+    <ul class="home-links">
+      <li><a href="/gallery">Gallery</a> <span class="muted">— curated collections</span></li>
+      <li><a href="/blog">Blog</a> <span class="muted">— writing, weekly-ish</span></li>
+      <li><a href="/community">Community</a> <span class="muted">— opening soon</span></li>
+      <li><a href="/about">About</a> <span class="muted">— the Joven behind Chiaroscuro</span></li>
+    </ul>
+  </section>
+</BaseLayout>
+
+<style>
+  .home-intro {
+    text-align: center;
+  }
+
+  .intro-note {
+    max-width: var(--cj-reading-width);
+    margin: 0 auto 40px;
+    color: var(--cj-muted);
+    font-size: 1.05rem;
+  }
+
+  .home-links {
+    list-style: none;
+    display: inline-block;
+    text-align: left;
+    font-family: var(--cj-serif);
+    font-size: 1.25rem;
+  }
+
+  .home-links li {
+    margin: 12px 0;
+  }
+
+  .muted {
+    font-family: var(--cj-sans);
+    font-size: 0.85rem;
+    color: var(--cj-quiet);
+    margin-left: 8px;
+  }
+</style>

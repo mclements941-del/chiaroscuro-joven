@@ -1,0 +1,186 @@
+/* Chiaroscuro Joven — global styles
+ *
+ * Palette, typography, and base rules derived from the chiaroscuro-gallery.html
+ * brand reference. Cormorant Garamond + Inter, deep black ground, warm cream
+ * text, gold accents. Light from darkness.
+ */
+
+@import '@fontsource/cormorant-garamond/400-italic.css';
+@import '@fontsource/cormorant-garamond/400.css';
+@import '@fontsource/cormorant-garamond/600.css';
+@import '@fontsource/inter/300.css';
+@import '@fontsource/inter/400.css';
+
+:root {
+  /* Ground */
+  --cj-black: #0a0a0a;
+  --cj-ink: #1a1a1a;
+  --cj-shadow: #2a2a2a;
+  --cj-dim: #333;
+
+  /* Text */
+  --cj-cream: #e8e0d4;
+  --cj-pearl: #f0e6d3;
+  --cj-muted: #999;
+  --cj-quiet: #777;
+  --cj-whisper: #555;
+  --cj-ghost: #444;
+
+  /* Gold accents */
+  --cj-gold: #b8a88a;
+  --cj-gold-bright: #c4a96a;
+  --cj-gold-warm: rgba(180, 140, 80, 0.08);
+
+  /* Layout */
+  --cj-max-width: 900px;
+  --cj-reading-width: 720px;
+
+  /* Type */
+  --cj-serif: 'Cormorant Garamond', 'Georgia', serif;
+  --cj-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--cj-black);
+  color: var(--cj-cream);
+  font-family: var(--cj-sans);
+  font-weight: 300;
+  line-height: 1.7;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography defaults */
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--cj-serif);
+  font-weight: 600;
+  color: var(--cj-pearl);
+  line-height: 1.2;
+}
+
+h1 { font-size: clamp(2.5rem, 6vw, 4.5rem); letter-spacing: 0.04em; }
+h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: 0.02em; }
+h3 { font-size: clamp(1.3rem, 2.5vw, 1.75rem); }
+h4 { font-size: 1.2rem; }
+
+p {
+  max-width: var(--cj-reading-width);
+}
+
+a {
+  color: var(--cj-gold);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--cj-gold-bright);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+strong {
+  color: var(--cj-pearl);
+  font-weight: 400;
+}
+
+em {
+  color: var(--cj-gold);
+  font-style: italic;
+  font-family: var(--cj-serif);
+}
+
+code, pre {
+  font-family: 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+  background: var(--cj-ink);
+  color: var(--cj-cream);
+  border-radius: 3px;
+}
+
+code { padding: 2px 6px; font-size: 0.9em; }
+pre { padding: 16px 20px; overflow-x: auto; border: 1px solid var(--cj-shadow); }
+pre code { background: transparent; padding: 0; }
+
+hr {
+  width: 60px;
+  height: 1px;
+  background: var(--cj-dim);
+  border: none;
+  margin: 60px auto;
+}
+
+/* Section label — small, uppercase, letter-spaced. Used throughout. */
+.section-label {
+  font-family: var(--cj-serif);
+  font-size: 1rem;
+  color: var(--cj-whisper);
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  margin-bottom: 40px;
+}
+
+/* Hero block — used on homepage + landing pages */
+.hero {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 80px 24px;
+  background: radial-gradient(ellipse at 50% 60%, var(--cj-gold-warm) 0%, transparent 70%);
+}
+
+.hero h1 {
+  font-weight: 600;
+  font-size: clamp(3rem, 8vw, 6rem);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.hero .subtitle {
+  font-family: var(--cj-serif);
+  font-style: italic;
+  font-size: clamp(1.1rem, 2.5vw, 1.5rem);
+  color: var(--cj-gold);
+  max-width: 600px;
+  margin-bottom: 32px;
+}
+
+.hero .definition {
+  font-size: 0.85rem;
+  color: var(--cj-quiet);
+  max-width: 520px;
+  border-top: 1px solid var(--cj-shadow);
+  padding-top: 24px;
+}
+
+/* Main container */
+.container {
+  max-width: var(--cj-max-width);
+  margin: 0 auto;
+  padding: 60px 24px;
+}
+
+.container--reading {
+  max-width: var(--cj-reading-width);
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .hero { min-height: 50vh; padding: 60px 20px; }
+  .container { padding: 40px 20px; }
+}

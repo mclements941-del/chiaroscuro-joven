@@ -1,0 +1,84 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const collections = [
+  {
+    slug: 'chiaroscuro',
+    title: 'Chiaroscuro',
+    subtitle: 'Caravaggio, La Tour, Gentileschi — and what their darkness teaches',
+    status: 'coming-soon',
+  },
+];
+---
+
+<BaseLayout title="Gallery" description="Curated collections — painting, film, literature, and what inspires.">
+  <section class="container">
+    <p class="section-label">Gallery</p>
+    <h1>Collections</h1>
+    <p class="intro">
+      Deep dives into ideas and images worth staring at. One collection to start — more as they
+      earn the page.
+    </p>
+
+    <ul class="collection-list">
+      {collections.map(({ slug, title, subtitle, status }) => (
+        <li class="collection">
+          <div class="collection-meta">
+            <h2 class="collection-title">
+              {status === 'coming-soon' ? title : <a href={`/gallery/${slug}`}>{title}</a>}
+            </h2>
+            <p class="collection-subtitle">{subtitle}</p>
+          </div>
+          <div class="collection-status">
+            {status === 'coming-soon' ? <span class="tag">Coming soon</span> : <a href={`/gallery/${slug}`}>View →</a>}
+          </div>
+        </li>
+      ))}
+    </ul>
+  </section>
+</BaseLayout>
+
+<style>
+  .intro {
+    color: var(--cj-muted);
+    margin: 16px 0 48px;
+  }
+
+  .collection-list {
+    list-style: none;
+  }
+
+  .collection {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 24px 0;
+    border-bottom: 1px solid var(--cj-ink);
+    gap: 24px;
+  }
+
+  .collection-title {
+    font-size: 1.75rem;
+    margin-bottom: 4px;
+  }
+
+  .collection-subtitle {
+    color: var(--cj-quiet);
+    font-size: 0.95rem;
+    font-style: italic;
+    font-family: var(--cj-serif);
+  }
+
+  .collection-status { flex-shrink: 0; }
+
+  .tag {
+    font-family: var(--cj-sans);
+    font-size: 0.7rem;
+    color: var(--cj-whisper);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border: 1px solid var(--cj-shadow);
+    padding: 4px 10px;
+    border-radius: 2px;
+  }
+</style>

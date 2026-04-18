@@ -1,0 +1,92 @@
+---
+const { pathname } = Astro.url;
+const isActive = (path: string) =>
+  path === '/' ? pathname === '/' : pathname.startsWith(path);
+
+const links = [
+  { href: '/', label: 'Home' },
+  { href: '/blog', label: 'Blog' },
+  { href: '/gallery', label: 'Gallery' },
+  { href: '/community', label: 'Community' },
+  { href: '/about', label: 'About' },
+];
+---
+
+<nav class="cj-nav" aria-label="Primary">
+  <a href="/" class="cj-nav-brand">Chiaroscuro Joven</a>
+  <ul class="cj-nav-links">
+    {links.map(({ href, label }) => (
+      <li>
+        <a href={href} class:list={['cj-nav-link', { active: isActive(href) }]}>
+          {label}
+        </a>
+      </li>
+    ))}
+  </ul>
+</nav>
+
+<style>
+  .cj-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: var(--cj-max-width);
+    margin: 0 auto;
+    padding: 24px 24px 0;
+    font-family: var(--cj-serif);
+  }
+
+  .cj-nav-brand {
+    font-size: 0.85rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--cj-pearl);
+    text-decoration: none;
+  }
+
+  .cj-nav-brand:hover {
+    color: var(--cj-gold-bright);
+    text-decoration: none;
+  }
+
+  .cj-nav-links {
+    list-style: none;
+    display: flex;
+    gap: 24px;
+    align-items: center;
+  }
+
+  .cj-nav-link {
+    font-family: var(--cj-sans);
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: var(--cj-muted);
+    text-decoration: none;
+    letter-spacing: 0.05em;
+    padding: 4px 0;
+    border-bottom: 1px solid transparent;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+
+  .cj-nav-link:hover {
+    color: var(--cj-pearl);
+    text-decoration: none;
+  }
+
+  .cj-nav-link.active {
+    color: var(--cj-gold);
+    border-bottom-color: var(--cj-gold);
+  }
+
+  @media (max-width: 600px) {
+    .cj-nav {
+      flex-direction: column;
+      gap: 16px;
+      padding-top: 20px;
+    }
+    .cj-nav-links {
+      gap: 16px;
+      font-size: 0.75rem;
+    }
+  }
+</style>

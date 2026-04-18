@@ -1,0 +1,39 @@
+---
+const year = new Date().getFullYear();
+---
+
+<footer class="cj-footer">
+  <p>© {year} Chiaroscuro Joven</p>
+  <p>
+    <a href="/rss.xml">RSS</a>
+    ·
+    <a href="/colophon">Colophon</a>
+    ·
+    <a href="/about">About</a>
+  </p>
+</footer>
+
+<style>
+  .cj-footer {
+    text-align: center;
+    padding: 60px 24px;
+    border-top: 1px solid var(--cj-ink);
+    font-size: 0.8rem;
+    color: var(--cj-ghost);
+    margin-top: 80px;
+  }
+
+  .cj-footer p {
+    margin: 0 auto 8px;
+    max-width: none;
+  }
+
+  .cj-footer a {
+    color: var(--cj-gold);
+    text-decoration: none;
+  }
+
+  .cj-footer a:hover {
+    text-decoration: underline;
+  }
+</style>
