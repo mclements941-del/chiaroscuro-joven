@@ -1,13 +1,10 @@
 ---
-import { getCollection } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getVisiblePosts } from '../../lib/posts';
 
 export const prerender = true;
 
-const posts = (await getCollection('posts', ({ data }) => {
-  if (!import.meta.env.PROD) return true;
-  return !data.draft && data.pubDate <= new Date();
-})).sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+const posts = await getVisiblePosts();
 
 const formatter = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',

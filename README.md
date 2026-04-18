@@ -35,8 +35,11 @@ src/
 npm install
 npm run dev       # dev server at http://localhost:4321
 npm run build     # production build to ./dist
-npm run preview   # preview the build locally
+vercel dev        # local preview with the Vercel adapter (SSR); requires `vercel link`
 ```
+
+> `astro preview` is not used on this project — the `@astrojs/vercel` adapter
+> doesn't support it. Use `vercel dev` for local preview of the built output.
 
 ## Deploy
 

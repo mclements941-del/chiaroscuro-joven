@@ -1,14 +1,11 @@
 import rss from '@astrojs/rss';
-import { getCollection } from 'astro:content';
 import type { APIContext } from 'astro';
+import { getVisiblePosts } from '../lib/posts';
 
 export const prerender = true;
 
 export async function GET(context: APIContext) {
-  const posts = (await getCollection('posts', ({ data }) => {
-    if (!import.meta.env.PROD) return true;
-    return !data.draft && data.pubDate <= new Date();
-  })).sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+  const posts = await getVisiblePosts();
 
   return rss({
     title: 'Chiaroscuro Joven',

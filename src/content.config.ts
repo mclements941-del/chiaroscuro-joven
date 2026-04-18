@@ -18,6 +18,8 @@ const gallery = defineCollection({
     z.object({
       title: z.string(),
       subtitle: z.string(),
+      summary: z.string().optional(),
+      status: z.enum(['live', 'coming-soon']).default('live'),
       description: z.string(),
       paintings: z.array(
         z.object({

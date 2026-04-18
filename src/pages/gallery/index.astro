@@ -1,16 +1,17 @@
 ---
+import { getCollection } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 
 export const prerender = true;
 
-const collections = [
-  {
-    slug: 'chiaroscuro',
-    title: 'Chiaroscuro',
-    subtitle: 'Caravaggio, La Tour, Gentileschi — and what their darkness teaches',
-    status: 'live',
-  },
-];
+const collections = (await getCollection('gallery'))
+  .map((entry) => ({
+    slug: entry.id,
+    title: entry.data.title,
+    subtitle: entry.data.summary ?? entry.data.subtitle,
+    status: entry.data.status,
+  }))
+  .sort((a, b) => a.title.localeCompare(b.title));
 ---
 
 <BaseLayout title="Gallery" description="Curated collections — painting, film, literature, and what inspires.">
