@@ -15,7 +15,6 @@ if (!profile) {
 }
 
 let formError: string | null = null;
-let saved = false;
 
 if (Astro.request.method === 'POST') {
   let form: FormData | null = null;
@@ -48,17 +47,22 @@ if (Astro.request.method === 'POST') {
         formError = 'Update failed. Try again.';
       }
     } else {
-      saved = true;
-      // First-time setup completes → go to /community.
+      // Post-redirect-GET: avoids F5 re-submits and renders the fresh
+      // profile state via middleware's next load. First-time setup goes to
+      // /community; subsequent edits return to setup with a notice.
       if (profile.needs_setup) {
         return Astro.redirect('/community');
       }
+      return Astro.redirect('/community/profile/setup?status=saved');
     }
   }
 }
 
-// Re-read profile post-save so the form shows the updated values.
+// `profile` is loaded by middleware on every request, so after a successful
+// POST + redirect the GET here sees the updated values.
 const current = profile;
+const savedNotice =
+  Astro.url.searchParams.get('status') === 'saved' && !current.needs_setup;
 ---
 <BaseLayout title="Your profile" description="Edit your Chiaroscuro Joven profile.">
   <section class="container container--reading">
@@ -69,9 +73,7 @@ const current = profile;
         Before you dive in, pick a display name that others will see on your posts.
       </p>
     )}
-    {saved && !current.needs_setup && (
-      <p class="notice notice--info">Saved.</p>
-    )}
+    {savedNotice && <p class="notice notice--info">Saved.</p>}
     {formError && <p class="notice notice--error">{formError}</p>}
     <form method="post" action="/community/profile/setup">
       <label for="display_name">Display name</label>
@@ -85,7 +87,7 @@ const current = profile;
         value={current.display_name}
       />
       <label for="bio">Bio <span class="hint">(optional, 280 chars)</span></label>
-      <textarea id="bio" name="bio" maxlength="280" rows="3"></textarea>
+      <textarea id="bio" name="bio" maxlength="280" rows="3">{current.bio ?? ''}</textarea>
       <button type="submit">{current.needs_setup ? 'Continue' : 'Save'}</button>
     </form>
   </section>

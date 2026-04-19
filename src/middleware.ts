@@ -102,7 +102,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // Load profile (own row via profiles_select_self RLS policy).
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, display_name, is_admin, banned_at, needs_setup, forum_joined_at')
+    .select('id, display_name, bio, is_admin, banned_at, needs_setup, forum_joined_at')
     .eq('id', user.id)
     .maybeSingle();
 

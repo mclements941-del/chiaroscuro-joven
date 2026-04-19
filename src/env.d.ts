@@ -5,6 +5,7 @@ import type { User } from '@supabase/supabase-js';
 type ForumProfile = {
   id: string;
   display_name: string;
+  bio: string | null;
   is_admin: boolean;
   banned_at: string | null;
   needs_setup: boolean;
