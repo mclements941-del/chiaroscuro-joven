@@ -7,6 +7,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import { createSupabaseServerClient } from '../../lib/supabase/server';
 
 const forumEnabled = process.env.FORUM_ENABLED === 'true';
+const selfProfile = Astro.locals.profile;
+const isAdmin = !!selfProfile?.is_admin;
 
 type ThreadRow = {
   id: string;
@@ -101,6 +103,18 @@ function pageUrl(p: number): string {
       </>
     ) : (
       <>
+        {selfProfile && (
+          <div class="member-bar">
+            <span class="member-name">{selfProfile.display_name}</span>
+            <span class="member-links">
+              <a href="/community/profile/setup">Your profile</a>
+              {isAdmin && <a href="/community/admin">Admin</a>}
+              <form method="post" action="/community/auth/logout" class="inline-form">
+                <button type="submit" class="member-logout">Log out</button>
+              </form>
+            </span>
+          </div>
+        )}
         <div class="head">
           <h1>Threads</h1>
           <a class="new-btn" href="/community/new">New thread</a>
@@ -166,6 +180,43 @@ function pageUrl(p: number): string {
     margin-top: 20px;
     font-size: 1.05rem;
   }
+  .member-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--cj-shadow);
+    font-family: var(--cj-sans);
+    font-size: 0.8rem;
+    color: var(--cj-quiet);
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .member-name { color: var(--cj-cream); }
+  .member-links {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+  .member-links a {
+    color: var(--cj-whisper);
+    text-decoration: none;
+    letter-spacing: 0.08em;
+  }
+  .member-links a:hover { color: var(--cj-gold); }
+  .inline-form { display: inline; margin: 0; }
+  .member-logout {
+    font-family: var(--cj-sans);
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    color: var(--cj-whisper);
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+  .member-logout:hover { color: var(--cj-gold); }
   .head {
     display: flex;
     align-items: baseline;

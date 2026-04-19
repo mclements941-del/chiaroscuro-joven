@@ -1,0 +1,193 @@
+---
+// /community/admin/invites/new — admin form for issuing a new invite.
+// Admin bucket (enforced by middleware on /community/admin/**).
+//
+// POST mirrors the flow in /community/api/invites (IMPL-0003 §6 Phase 3):
+//   1. Session client: rpc_issue_invite (admin check + uid + rate-limit)
+//   2. Service-role client: rpc_lookup_user_by_email
+//   3. Branch: inviteUserByEmail (fresh) or signInWithOtp (existing unjoined)
+//   4. On Supabase failure: rpc_revoke_invite to keep DB consistent
+//
+// Duplicated on purpose: the JSON endpoint is still used by any future
+// automation / CLI; this form is the browser path. Post-launch follow-up:
+// extract both into src/lib/forum/invites.ts.
+
+import BaseLayout from '../../../../layouts/BaseLayout.astro';
+import { z } from 'zod';
+import { createSupabaseServerClient } from '../../../../lib/supabase/server';
+import { createSupabaseAdminClient } from '../../../../lib/supabase/admin';
+import { getCallbackUrl } from '../../../../lib/auth-origin';
+
+const emailSchema = z.object({
+  email: z.string().trim().toLowerCase().pipe(z.email()),
+});
+
+let formError: string | null = null;
+let notice: string | null = null;
+let emailValue = '';
+
+if (Astro.request.method === 'POST') {
+  let form: FormData | null = null;
+  try {
+    form = await Astro.request.formData();
+  } catch {
+    formError = 'Submission could not be parsed.';
+  }
+  if (form) {
+    emailValue = String(form.get('email') ?? '');
+    const parsed = emailSchema.safeParse({ email: emailValue });
+    if (!parsed.success) {
+      formError = 'Enter a valid email address.';
+    } else {
+      const email = parsed.data.email;
+      const supabase = createSupabaseServerClient(Astro.cookies);
+      const admin = createSupabaseAdminClient();
+
+      // 1. rpc_issue_invite
+      const { data: inviteId, error: issueErr } = await supabase.rpc(
+        'rpc_issue_invite',
+        { p_email: email, p_ttl_days: 14 },
+      );
+      if (issueErr) {
+        if (/already_member/.test(issueErr.message)) {
+          formError = 'That email is already a member.';
+        } else if (/forbidden/.test(issueErr.message)) {
+          formError = 'Not authorized.';
+        } else {
+          console.error('[admin invite] rpc_issue_invite:', issueErr.message);
+          formError = 'Could not issue invite.';
+        }
+      } else {
+        // 2. Lookup existing auth.users
+        const { data: existingUserId, error: lookupErr } = await admin.rpc(
+          'rpc_lookup_user_by_email',
+          { p_email: email },
+        );
+        if (lookupErr) {
+          console.error('[admin invite] rpc_lookup_user_by_email:', lookupErr.message);
+          await supabase.rpc('rpc_revoke_invite', { p_id: inviteId });
+          formError = 'Could not verify user state. Invite rolled back.';
+        } else {
+          // 3. Send via the correct Supabase path.
+          let sendErr: { message: string } | null = null;
+          if (!existingUserId) {
+            const { error } = await admin.auth.admin.inviteUserByEmail(email, {
+              redirectTo: getCallbackUrl(),
+            });
+            sendErr = error;
+          } else {
+            const { error } = await admin.auth.signInWithOtp({
+              email,
+              options: {
+                shouldCreateUser: false,
+                emailRedirectTo: getCallbackUrl(),
+              },
+            });
+            sendErr = error;
+          }
+          if (sendErr) {
+            console.error('[admin invite] send failure:', sendErr.message);
+            await supabase.rpc('rpc_revoke_invite', { p_id: inviteId });
+            formError = 'Email send failed. Invite rolled back.';
+          } else {
+            notice = `Invite sent to ${email}.`;
+            emailValue = '';
+          }
+        }
+      }
+    }
+  }
+}
+---
+<BaseLayout title="Issue invite" description="Admin — issue an invite.">
+  <section class="container container--reading">
+    <p class="section-label"><a href="/community/admin">← Admin</a></p>
+    <h1>Issue invite</h1>
+    <p class="lede">
+      Sends a magic-link invite valid for 14 days. If an earlier active invite
+      exists for this email, it's superseded.
+    </p>
+    {notice && <p class="notice notice--info">{notice}</p>}
+    {formError && <p class="notice notice--error">{formError}</p>}
+    <form method="post" action="/community/admin/invites/new">
+      <label for="email">Email</label>
+      <input
+        id="email"
+        name="email"
+        type="email"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        required
+        value={emailValue}
+      />
+      <button type="submit">Issue invite</button>
+    </form>
+  </section>
+</BaseLayout>
+
+<style>
+  h1 {
+    font-family: var(--cj-serif);
+    font-weight: 600;
+    color: var(--cj-pearl);
+    font-size: clamp(2rem, 5vw, 3rem);
+    letter-spacing: 0.02em;
+    margin: 0 0 8px;
+  }
+  .lede { color: var(--cj-muted); margin: 0 0 24px; max-width: 520px; }
+  .notice {
+    padding: 8px 16px;
+    margin: 16px 0;
+    font-size: 0.95rem;
+    border-left: 2px solid var(--cj-shadow);
+    color: var(--cj-whisper);
+  }
+  .notice--info { border-left-color: var(--cj-gold); color: var(--cj-cream); }
+  .notice--error { border-left-color: #b85050; color: var(--cj-pearl); }
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 520px;
+  }
+  label {
+    font-family: var(--cj-sans);
+    font-size: 0.75rem;
+    color: var(--cj-whisper);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 12px;
+  }
+  input {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.95rem;
+    background: transparent;
+    border: 1px solid var(--cj-shadow);
+    color: var(--cj-pearl);
+    padding: 12px 14px;
+    border-radius: 2px;
+  }
+  input:focus { outline: none; border-color: var(--cj-gold); }
+  button {
+    margin-top: 8px;
+    font-family: var(--cj-sans);
+    font-size: 0.85rem;
+    background: var(--cj-gold);
+    color: var(--cj-ink);
+    padding: 12px 18px;
+    border: none;
+    cursor: pointer;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border-radius: 2px;
+    align-self: start;
+  }
+  button:hover { background: var(--cj-gold-bright); }
+  .section-label a {
+    color: var(--cj-whisper);
+    text-decoration: none;
+    letter-spacing: 0.25em;
+  }
+  .section-label a:hover { color: var(--cj-gold); }
+</style>

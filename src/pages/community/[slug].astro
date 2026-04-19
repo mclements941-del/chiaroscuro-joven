@@ -1,6 +1,12 @@
 ---
 // /community/[slug] — thread detail + flat reply list + reply form.
 // Members-bucket route (middleware enforces forum_joined_at + not banned).
+//
+// Phase 5 additions:
+//   - Thread actions bar: edit (own ≤10m), delete (own ≤10m OR admin), lock (admin)
+//   - Per-reply actions: edit (own ≤10m), delete (own ≤10m OR admin)
+//   - Admin viewing a deleted thread sees a "[removed]" banner; members
+//     don't reach this page because RLS filters deleted threads out.
 
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { createSupabaseServerClient } from '../../lib/supabase/server';
@@ -10,6 +16,10 @@ const { slug } = Astro.params;
 if (!slug) return new Response('Not Found', { status: 404 });
 
 const supabase = createSupabaseServerClient(Astro.cookies);
+const self = Astro.locals.user;
+const selfProfile = Astro.locals.profile;
+const isAdmin = !!selfProfile?.is_admin;
+const selfId = self?.id ?? null;
 
 // ──────────────────────────────────────────────────────────────────────────
 // POST: submit a reply. Uses the thread's id (looked up from slug).
@@ -74,16 +84,18 @@ type ThreadRow = {
   title: string;
   body: string;
   category_slug: string;
+  author_id: string;
   created_at: string;
   reply_count: number;
   locked_at: string | null;
+  deleted_at: string | null;
   author: { display_name: string } | null;
 };
 
 const { data: threadRaw } = await supabase
   .from('threads')
   .select(
-    'id, slug, title, body, category_slug, created_at, reply_count, locked_at, author:author_id(display_name)',
+    'id, slug, title, body, category_slug, author_id, created_at, reply_count, locked_at, deleted_at, author:author_id(display_name)',
   )
   .eq('slug', slug)
   .maybeSingle();
@@ -98,21 +110,58 @@ type ReplyRow = {
   id: string;
   body: string;
   created_at: string;
+  author_id: string;
   author: { display_name: string } | null;
 };
 
 const { data: replyData } = await supabase
   .from('replies')
-  .select('id, body, created_at, author:author_id(display_name)')
+  .select('id, body, created_at, author_id, author:author_id(display_name)')
   .eq('thread_id', thread.id)
+  .is('deleted_at', null)
   .order('created_at', { ascending: true });
 
-const replies: Array<ReplyRow & { bodyHtml: string }> = (
+const TEN_MIN_MS = 10 * 60 * 1000;
+
+function withinEditWindow(isoCreated: string): boolean {
+  return new Date(isoCreated).getTime() > Date.now() - TEN_MIN_MS;
+}
+
+// Per-reply flags (computed once, embedded in the render).
+type ReplyWithActions = ReplyRow & {
+  bodyHtml: string;
+  canEdit: boolean;
+  canDelete: boolean;
+};
+
+const threadLockedOrDeleted = !!thread.locked_at || !!thread.deleted_at;
+
+const replies: ReplyWithActions[] = (
   (replyData ?? []) as unknown as ReplyRow[]
-).map((r) => ({ ...r, bodyHtml: renderMarkdown(r.body) }));
+).map((r) => {
+  const ownedByMe = !!selfId && r.author_id === selfId;
+  const inWindow = withinEditWindow(r.created_at);
+  return {
+    ...r,
+    bodyHtml: renderMarkdown(r.body),
+    canEdit: ownedByMe && inWindow && !threadLockedOrDeleted,
+    canDelete:
+      (ownedByMe && inWindow && !threadLockedOrDeleted) || isAdmin,
+  };
+});
 
 const threadBodyHtml = renderMarkdown(thread.body);
 const dateFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' });
+
+// Thread-level action flags.
+const threadOwnedByMe = !!selfId && thread.author_id === selfId;
+const threadInWindow = withinEditWindow(thread.created_at);
+const canEditThread =
+  threadOwnedByMe && threadInWindow && !thread.locked_at && !thread.deleted_at;
+const canDeleteThread =
+  (threadOwnedByMe && threadInWindow && !thread.deleted_at) ||
+  (isAdmin && !thread.deleted_at);
+const canLockThread = isAdmin && !thread.locked_at && !thread.deleted_at;
 ---
 <BaseLayout title={thread.title} description="A thread on Chiaroscuro Joven.">
   <article class="container container--reading thread">
@@ -130,7 +179,43 @@ const dateFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' });
           <span class="locked">locked</span>
         </>
       )}
+      {thread.deleted_at && (
+        <>
+          <span aria-hidden="true">·</span>
+          <span class="removed">removed</span>
+        </>
+      )}
     </div>
+
+    {thread.deleted_at && (
+      <p class="removed-banner">
+        This thread has been removed. You're seeing it because you're an admin.
+      </p>
+    )}
+
+    {(canEditThread || canDeleteThread || canLockThread) && (
+      <div class="thread-actions">
+        {canEditThread && (
+          <a class="action-link" href={`/community/${slug}/edit`}>Edit</a>
+        )}
+        {canLockThread && (
+          <form method="post" action={`/community/${slug}/lock`} class="inline-form">
+            <button type="submit" class="action-btn">Lock</button>
+          </form>
+        )}
+        {canDeleteThread && (
+          <form
+            method="post"
+            action={`/community/${slug}/delete`}
+            class="inline-form"
+            onsubmit="return confirm('Delete this thread?')"
+          >
+            <button type="submit" class="action-btn action-btn--danger">Delete</button>
+          </form>
+        )}
+      </div>
+    )}
+
     <div class="body prose" set:html={threadBodyHtml}></div>
 
     <section class="replies">
@@ -138,18 +223,38 @@ const dateFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' });
         {thread.reply_count} {thread.reply_count === 1 ? 'reply' : 'replies'}
       </h2>
       {replies.map((r) => (
-        <article class="reply">
+        <article class="reply" id={`reply-${r.id}`}>
           <div class="meta">
             <span>{r.author?.display_name ?? 'member'}</span>
             <span aria-hidden="true">·</span>
             <span>{dateFmt.format(new Date(r.created_at))}</span>
+            {(r.canEdit || r.canDelete) && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span class="reply-actions">
+                  {r.canEdit && (
+                    <a class="action-link-sm" href={`/community/reply/${r.id}/edit`}>edit</a>
+                  )}
+                  {r.canDelete && (
+                    <form
+                      method="post"
+                      action={`/community/reply/${r.id}/delete`}
+                      class="inline-form"
+                      onsubmit="return confirm('Delete this reply?')"
+                    >
+                      <button type="submit" class="action-link-sm action-link-sm--danger">delete</button>
+                    </form>
+                  )}
+                </span>
+              </>
+            )}
           </div>
           <div class="body prose" set:html={r.bodyHtml}></div>
         </article>
       ))}
     </section>
 
-    {!thread.locked_at ? (
+    {!thread.locked_at && !thread.deleted_at ? (
       <section class="reply-form">
         <h2>Reply</h2>
         {replyError && <p class="form-error">{replyError}</p>}
@@ -159,9 +264,9 @@ const dateFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' });
           <button type="submit">Post reply</button>
         </form>
       </section>
-    ) : (
+    ) : thread.locked_at && !thread.deleted_at ? (
       <p class="locked-note">This thread is locked. No new replies.</p>
-    )}
+    ) : null}
   </article>
 </BaseLayout>
 
@@ -181,9 +286,75 @@ const dateFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' });
     font-size: 0.8rem;
     color: var(--cj-quiet);
     flex-wrap: wrap;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
+    align-items: center;
   }
   .meta .locked { color: var(--cj-gold); }
+  .meta .removed { color: #b85050; }
+
+  .removed-banner {
+    padding: 10px 16px;
+    margin: 0 0 16px;
+    font-size: 0.9rem;
+    color: var(--cj-pearl);
+    border-left: 2px solid #b85050;
+    font-family: var(--cj-sans);
+  }
+
+  .thread-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 8px 0;
+    margin-bottom: 24px;
+    border-top: 1px solid var(--cj-shadow);
+    border-bottom: 1px solid var(--cj-shadow);
+  }
+  .inline-form { display: inline; margin: 0; }
+  .action-link, .action-btn {
+    font-family: var(--cj-sans);
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--cj-whisper);
+    text-decoration: none;
+    background: transparent;
+    border: 1px solid var(--cj-shadow);
+    padding: 4px 10px;
+    cursor: pointer;
+    border-radius: 2px;
+  }
+  .action-link:hover, .action-btn:hover {
+    color: var(--cj-gold);
+    border-color: var(--cj-gold);
+  }
+  .action-btn--danger { color: #b85050; border-color: #b85050; }
+  .action-btn--danger:hover {
+    background: #b85050;
+    color: var(--cj-pearl);
+    border-color: #b85050;
+  }
+
+  .reply-actions {
+    display: inline-flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .action-link-sm {
+    font-family: var(--cj-sans);
+    font-size: 0.75rem;
+    color: var(--cj-whisper);
+    text-decoration: none;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+  }
+  .action-link-sm:hover { color: var(--cj-gold); }
+  .action-link-sm--danger { color: #b85050; }
+  .action-link-sm--danger:hover { color: #e47070; }
+
   .body.prose { margin-bottom: 48px; }
   .body.prose :global(p) {
     font-size: 1.05rem;
@@ -232,6 +403,13 @@ const dateFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' });
     border-bottom: 1px solid var(--cj-shadow);
   }
   .reply:last-of-type { border-bottom: none; }
+  .reply:target {
+    background: rgba(184, 168, 138, 0.05);
+    padding-left: 12px;
+    padding-right: 12px;
+    margin-left: -12px;
+    margin-right: -12px;
+  }
 
   .reply-form {
     margin-top: 48px;

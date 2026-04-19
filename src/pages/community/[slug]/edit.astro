@@ -1,0 +1,213 @@
+---
+// /community/[slug]/edit — edit own thread within the 10-min window.
+// Members bucket. Authorization is enforced server-side in `rpc_edit_thread`;
+// we mirror the window check for UX (hide the form if the window has passed)
+// but rely on the RPC as the trust boundary.
+
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { createSupabaseServerClient } from '../../../lib/supabase/server';
+
+const { slug } = Astro.params;
+if (!slug) return new Response('Not Found', { status: 404 });
+
+const supabase = createSupabaseServerClient(Astro.cookies);
+const user = Astro.locals.user;
+if (!user) return Astro.redirect('/community/login');
+
+type ThreadRow = {
+  id: string;
+  slug: string;
+  title: string;
+  body: string;
+  author_id: string;
+  created_at: string;
+  locked_at: string | null;
+  deleted_at: string | null;
+};
+
+const { data: thread } = (await supabase
+  .from('threads')
+  .select('id, slug, title, body, author_id, created_at, locked_at, deleted_at')
+  .eq('slug', slug)
+  .maybeSingle()) as { data: ThreadRow | null };
+
+if (!thread) return new Response('Not Found', { status: 404 });
+
+// Ownership + window + lock check. Admins cannot edit others' content —
+// only soft-delete is admin-scoped in v1. Keep the rules tight.
+const ownedByMe = thread.author_id === user.id;
+const withinWindow =
+  new Date(thread.created_at).getTime() > Date.now() - 10 * 60 * 1000;
+const editable =
+  ownedByMe && withinWindow && !thread.locked_at && !thread.deleted_at;
+
+if (!editable) {
+  // 404 rather than a specific reason — mirrors the RPC's indifference to
+  // "why" and doesn't advertise edit-window state to non-owners.
+  return new Response('Not Found', { status: 404 });
+}
+
+let formError: string | null = null;
+let values = { title: thread.title, body: thread.body };
+
+if (Astro.request.method === 'POST') {
+  let form: FormData | null = null;
+  try {
+    form = await Astro.request.formData();
+  } catch {
+    formError = 'Submission could not be parsed.';
+  }
+  if (form) {
+    values = {
+      title: String(form.get('title') ?? '').trim(),
+      body: String(form.get('body') ?? '').trim(),
+    };
+    if (values.title.length < 3 || values.title.length > 140) {
+      formError = 'Title must be 3–140 characters.';
+    } else if (values.body.length < 1 || values.body.length > 20000) {
+      formError = 'Body must be 1–20,000 characters.';
+    } else {
+      const { error } = await supabase.rpc('rpc_edit_thread', {
+        p_id: thread.id,
+        p_title: values.title,
+        p_body: values.body,
+      });
+      if (error) {
+        if (/edit_forbidden/.test(error.message)) {
+          formError = 'Edit window has closed or the thread was removed.';
+        } else if (/rate_limit_exceeded/.test(error.message)) {
+          formError = 'Too many edits. Wait a moment.';
+        } else {
+          console.error('[thread edit] rpc_edit_thread:', error.message);
+          formError = 'Edit failed. Try again.';
+        }
+      } else {
+        return Astro.redirect(`/community/${slug}`);
+      }
+    }
+  }
+}
+
+// Mins remaining in the window, for the hint.
+const msLeft =
+  new Date(thread.created_at).getTime() + 10 * 60 * 1000 - Date.now();
+const minsLeft = Math.max(0, Math.ceil(msLeft / 60000));
+---
+<BaseLayout title={`Edit: ${thread.title}`} description="Edit your thread.">
+  <article class="container container--reading">
+    <p class="section-label"><a href={`/community/${slug}`}>← Back to thread</a></p>
+    <h1>Edit thread</h1>
+    <p class="hint">{minsLeft} {minsLeft === 1 ? 'minute' : 'minutes'} left in the edit window.</p>
+    {formError && <p class="error">{formError}</p>}
+    <form method="post" action={`/community/${slug}/edit`}>
+      <label for="title">Title <span class="hint-inline">(3–140 chars)</span></label>
+      <input
+        id="title"
+        name="title"
+        type="text"
+        required
+        minlength="3"
+        maxlength="140"
+        value={values.title}
+      />
+      <label for="body">Body <span class="hint-inline">(markdown, up to 20,000 chars)</span></label>
+      <textarea id="body" name="body" required maxlength="20000" rows="12">{values.body}</textarea>
+      <div class="actions">
+        <button type="submit">Save</button>
+        <a class="cancel" href={`/community/${slug}`}>Cancel</a>
+      </div>
+    </form>
+  </article>
+</BaseLayout>
+
+<style>
+  h1 {
+    font-family: var(--cj-serif);
+    font-weight: 600;
+    color: var(--cj-pearl);
+    font-size: clamp(2rem, 5vw, 3rem);
+    letter-spacing: 0.02em;
+    margin: 0 0 12px;
+  }
+  .hint {
+    font-family: var(--cj-sans);
+    font-size: 0.8rem;
+    color: var(--cj-quiet);
+    margin: 0 0 24px;
+  }
+  .error {
+    color: var(--cj-pearl);
+    border-left: 2px solid #b85050;
+    padding: 8px 16px;
+    margin: 0 0 16px;
+    font-size: 0.95rem;
+  }
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 720px;
+  }
+  label {
+    font-family: var(--cj-sans);
+    font-size: 0.75rem;
+    color: var(--cj-whisper);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 12px;
+  }
+  .hint-inline {
+    text-transform: none;
+    letter-spacing: 0.02em;
+    font-size: 0.7rem;
+    color: var(--cj-quiet);
+  }
+  input, textarea {
+    font-family: var(--cj-serif);
+    font-size: 1.05rem;
+    background: transparent;
+    border: 1px solid var(--cj-shadow);
+    color: var(--cj-pearl);
+    padding: 12px 14px;
+    border-radius: 2px;
+  }
+  textarea {
+    font-family: var(--cj-sans);
+    font-size: 0.95rem;
+    resize: vertical;
+  }
+  input:focus, textarea:focus { outline: none; border-color: var(--cj-gold); }
+  .actions {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    margin-top: 16px;
+  }
+  button {
+    font-family: var(--cj-sans);
+    font-size: 0.85rem;
+    background: var(--cj-gold);
+    color: var(--cj-ink);
+    padding: 12px 18px;
+    border: none;
+    cursor: pointer;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border-radius: 2px;
+  }
+  button:hover { background: var(--cj-gold-bright); }
+  .cancel {
+    font-family: var(--cj-sans);
+    font-size: 0.8rem;
+    color: var(--cj-whisper);
+    letter-spacing: 0.05em;
+    text-decoration: none;
+  }
+  .cancel:hover { color: var(--cj-gold); }
+  .section-label a {
+    color: var(--cj-whisper);
+    text-decoration: none;
+    letter-spacing: 0.25em;
+  }
+  .section-label a:hover { color: var(--cj-gold); }
+</style>

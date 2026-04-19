@@ -1,0 +1,392 @@
+---
+// /community/admin — admin dashboard.
+// Admin bucket — middleware enforces is_admin. Sections:
+//   1. Invites — recent, with Revoke action on active ones
+//   2. Soft-deleted content — recent 20 threads/replies
+//   3. Members — active (non-banned, non-self) members with Ban action
+//   4. Banned — read-only list
+
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { createSupabaseServerClient } from '../../../lib/supabase/server';
+
+const supabase = createSupabaseServerClient(Astro.cookies);
+const self = Astro.locals.user;
+if (!self) return Astro.redirect('/community/login');
+
+type InviteRow = {
+  id: string;
+  email: string;
+  issued_at: string;
+  expires_at: string;
+  used_at: string | null;
+  revoked_at: string | null;
+};
+type DeletedThreadRow = {
+  id: string;
+  slug: string;
+  title: string;
+  deleted_at: string | null;
+  author: { display_name: string } | null;
+};
+type DeletedReplyRow = {
+  id: string;
+  thread_id: string;
+  body: string;
+  deleted_at: string | null;
+  author: { display_name: string } | null;
+};
+type MemberRow = {
+  id: string;
+  display_name: string;
+  bio: string | null;
+  forum_joined_at: string | null;
+  banned_at: string | null;
+  is_admin: boolean;
+};
+
+const { data: inviteData } = await supabase
+  .from('invites')
+  .select('id, email, issued_at, expires_at, used_at, revoked_at')
+  .order('issued_at', { ascending: false })
+  .limit(25);
+const invites = (inviteData ?? []) as InviteRow[];
+
+const { data: delThreadData } = await supabase
+  .from('threads')
+  .select('id, slug, title, deleted_at, author:author_id(display_name)')
+  .not('deleted_at', 'is', null)
+  .order('deleted_at', { ascending: false })
+  .limit(20);
+const deletedThreads = (delThreadData ?? []) as unknown as DeletedThreadRow[];
+
+const { data: delReplyData } = await supabase
+  .from('replies')
+  .select('id, thread_id, body, deleted_at, author:author_id(display_name)')
+  .not('deleted_at', 'is', null)
+  .order('deleted_at', { ascending: false })
+  .limit(20);
+const deletedReplies = (delReplyData ?? []) as unknown as DeletedReplyRow[];
+
+const { data: memberData } = await supabase
+  .from('profiles')
+  .select('id, display_name, bio, forum_joined_at, banned_at, is_admin')
+  .not('forum_joined_at', 'is', null)
+  .order('forum_joined_at', { ascending: false });
+const profiles = (memberData ?? []) as MemberRow[];
+const activeMembers = profiles.filter(
+  (p) => !p.banned_at && p.id !== self.id,
+);
+const bannedMembers = profiles.filter((p) => !!p.banned_at);
+
+const dateFmt = new Intl.DateTimeFormat('en-US', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
+function inviteStatus(i: InviteRow): { label: string; cls: string } {
+  if (i.used_at) return { label: 'consumed', cls: 'ok' };
+  if (i.revoked_at) return { label: 'revoked', cls: 'muted' };
+  if (new Date(i.expires_at).getTime() < Date.now())
+    return { label: 'expired', cls: 'muted' };
+  return { label: 'active', cls: 'active' };
+}
+
+function truncate(s: string, n: number): string {
+  if (s.length <= n) return s;
+  return s.slice(0, n).trimEnd() + '…';
+}
+---
+<BaseLayout title="Admin" description="Chiaroscuro Joven admin dashboard.">
+  <section class="container container--reading admin">
+    <p class="section-label"><a href="/community">← Community</a></p>
+    <h1>Admin</h1>
+    <p class="lede">Moderation surface. Use with care.</p>
+
+    <nav class="admin-nav">
+      <a href="/community/admin/invites/new">Issue invite</a>
+    </nav>
+
+    {/* ------------------------------------------------------------------ */}
+    {/* Invites                                                             */}
+    {/* ------------------------------------------------------------------ */}
+    <h2>Invites</h2>
+    {invites.length === 0 ? (
+      <p class="empty">No invites issued yet.</p>
+    ) : (
+      <table class="ledger">
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Issued</th>
+            <th>Status</th>
+            <th class="right">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {invites.map((i) => {
+            const status = inviteStatus(i);
+            const canRevoke = !i.used_at && !i.revoked_at;
+            return (
+              <tr>
+                <td class="mono">{i.email}</td>
+                <td>{dateFmt.format(new Date(i.issued_at))}</td>
+                <td><span class:list={['status', status.cls]}>{status.label}</span></td>
+                <td class="right">
+                  {canRevoke ? (
+                    <form method="post" action="/community/api/admin/revoke-invite" class="inline-form">
+                      <input type="hidden" name="invite_id" value={i.id} />
+                      <button type="submit" class="btn-danger">Revoke</button>
+                    </form>
+                  ) : (
+                    <span class="muted">—</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    )}
+
+    {/* ------------------------------------------------------------------ */}
+    {/* Active members (with ban action)                                   */}
+    {/* ------------------------------------------------------------------ */}
+    <h2>Active members</h2>
+    {activeMembers.length === 0 ? (
+      <p class="empty">No other members yet.</p>
+    ) : (
+      <table class="ledger">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Joined</th>
+            <th>Role</th>
+            <th class="right">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {activeMembers.map((m) => (
+            <tr>
+              <td>
+                <strong>{m.display_name}</strong>
+                {m.bio && <div class="sub">{truncate(m.bio, 80)}</div>}
+              </td>
+              <td>
+                {m.forum_joined_at ? dateFmt.format(new Date(m.forum_joined_at)) : '—'}
+              </td>
+              <td>{m.is_admin ? <span class="status active">admin</span> : 'member'}</td>
+              <td class="right">
+                <form method="post" action="/community/api/admin/ban" class="inline-form" onsubmit="return confirm('Ban this member? This is one-way in v1.')">
+                  <input type="hidden" name="user_id" value={m.id} />
+                  <button type="submit" class="btn-danger">Ban</button>
+                </form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+
+    {/* ------------------------------------------------------------------ */}
+    {/* Banned                                                              */}
+    {/* ------------------------------------------------------------------ */}
+    {bannedMembers.length > 0 && (
+      <>
+        <h2>Banned</h2>
+        <table class="ledger">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Banned at</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bannedMembers.map((m) => (
+              <tr>
+                <td>{m.display_name}</td>
+                <td>{m.banned_at ? dateFmt.format(new Date(m.banned_at)) : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </>
+    )}
+
+    {/* ------------------------------------------------------------------ */}
+    {/* Deleted content                                                     */}
+    {/* ------------------------------------------------------------------ */}
+    <h2>Recently deleted threads</h2>
+    {deletedThreads.length === 0 ? (
+      <p class="empty">No deleted threads.</p>
+    ) : (
+      <ul class="deleted">
+        {deletedThreads.map((t) => (
+          <li>
+            <span class="title">{t.title}</span>
+            <span class="sub">
+              by {t.author?.display_name ?? 'member'}
+              {' · '}
+              deleted {t.deleted_at ? dateFmt.format(new Date(t.deleted_at)) : '—'}
+            </span>
+          </li>
+        ))}
+      </ul>
+    )}
+
+    <h2>Recently deleted replies</h2>
+    {deletedReplies.length === 0 ? (
+      <p class="empty">No deleted replies.</p>
+    ) : (
+      <ul class="deleted">
+        {deletedReplies.map((r) => (
+          <li>
+            <span class="title">{truncate(r.body, 120)}</span>
+            <span class="sub">
+              by {r.author?.display_name ?? 'member'}
+              {' · '}
+              deleted {r.deleted_at ? dateFmt.format(new Date(r.deleted_at)) : '—'}
+            </span>
+          </li>
+        ))}
+      </ul>
+    )}
+  </section>
+</BaseLayout>
+
+<style>
+  h1 {
+    font-family: var(--cj-serif);
+    font-weight: 600;
+    color: var(--cj-pearl);
+    font-size: clamp(2rem, 5vw, 3rem);
+    letter-spacing: 0.02em;
+    margin: 0 0 8px;
+  }
+  .lede { color: var(--cj-muted); margin: 0 0 16px; }
+  .admin-nav {
+    display: flex;
+    gap: 16px;
+    padding: 12px 0;
+    border-top: 1px solid var(--cj-shadow);
+    border-bottom: 1px solid var(--cj-shadow);
+    margin-bottom: 32px;
+  }
+  .admin-nav a {
+    font-family: var(--cj-sans);
+    font-size: 0.8rem;
+    color: var(--cj-gold);
+    text-decoration: none;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .admin-nav a:hover { color: var(--cj-gold-bright); }
+
+  h2 {
+    font-family: var(--cj-sans);
+    font-size: 0.8rem;
+    color: var(--cj-whisper);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-weight: 400;
+    margin: 40px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--cj-shadow);
+  }
+
+  .ledger {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--cj-sans);
+    font-size: 0.9rem;
+  }
+  .ledger thead th {
+    font-weight: 400;
+    font-size: 0.7rem;
+    color: var(--cj-quiet);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--cj-shadow);
+  }
+  .ledger th.right, .ledger td.right { text-align: right; }
+  .ledger tbody td {
+    padding: 12px 10px;
+    border-bottom: 1px solid var(--cj-shadow);
+    vertical-align: top;
+  }
+  .ledger .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85em;
+    color: var(--cj-cream);
+  }
+  .ledger .sub {
+    font-size: 0.8rem;
+    color: var(--cj-quiet);
+    margin-top: 2px;
+  }
+  .inline-form { display: inline; margin: 0; }
+
+  .status {
+    font-family: var(--cj-sans);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 2px;
+    border: 1px solid var(--cj-shadow);
+  }
+  .status.active { color: var(--cj-gold); border-color: var(--cj-gold); }
+  .status.ok { color: var(--cj-cream); border-color: var(--cj-shadow); }
+  .status.muted { color: var(--cj-quiet); }
+  .muted { color: var(--cj-quiet); }
+
+  .btn-danger {
+    font-family: var(--cj-sans);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: transparent;
+    border: 1px solid #b85050;
+    color: #b85050;
+    padding: 4px 10px;
+    cursor: pointer;
+    border-radius: 2px;
+  }
+  .btn-danger:hover { background: #b85050; color: var(--cj-pearl); }
+
+  .empty {
+    color: var(--cj-quiet);
+    font-style: italic;
+    padding: 12px 0;
+  }
+  .deleted {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .deleted li {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--cj-shadow);
+  }
+  .deleted .title {
+    display: block;
+    color: var(--cj-cream);
+    font-family: var(--cj-sans);
+    font-size: 0.95rem;
+  }
+  .deleted .sub {
+    display: block;
+    font-family: var(--cj-sans);
+    font-size: 0.75rem;
+    color: var(--cj-quiet);
+    margin-top: 2px;
+  }
+
+  .section-label a {
+    color: var(--cj-whisper);
+    text-decoration: none;
+    letter-spacing: 0.25em;
+  }
+  .section-label a:hover { color: var(--cj-gold); }
+</style>

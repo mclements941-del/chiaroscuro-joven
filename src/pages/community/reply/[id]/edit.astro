@@ -1,0 +1,180 @@
+---
+// /community/reply/[id]/edit — edit own reply within the 10-min window.
+// Same trust model as thread edit: RPC is the authoritative window check;
+// this page mirrors it for UX only.
+
+import BaseLayout from '../../../../layouts/BaseLayout.astro';
+import { createSupabaseServerClient } from '../../../../lib/supabase/server';
+
+const { id } = Astro.params;
+if (!id) return new Response('Not Found', { status: 404 });
+
+const supabase = createSupabaseServerClient(Astro.cookies);
+const user = Astro.locals.user;
+if (!user) return Astro.redirect('/community/login');
+
+type ReplyRow = {
+  id: string;
+  thread_id: string;
+  body: string;
+  author_id: string;
+  created_at: string;
+  deleted_at: string | null;
+};
+
+const { data: reply } = (await supabase
+  .from('replies')
+  .select('id, thread_id, body, author_id, created_at, deleted_at')
+  .eq('id', id)
+  .maybeSingle()) as { data: ReplyRow | null };
+
+if (!reply) return new Response('Not Found', { status: 404 });
+
+// We also need the thread slug for navigation after save.
+const { data: thread } = await supabase
+  .from('threads')
+  .select('slug, locked_at')
+  .eq('id', reply.thread_id)
+  .maybeSingle();
+if (!thread) return new Response('Not Found', { status: 404 });
+
+const ownedByMe = reply.author_id === user.id;
+const withinWindow =
+  new Date(reply.created_at).getTime() > Date.now() - 10 * 60 * 1000;
+const editable =
+  ownedByMe && withinWindow && !reply.deleted_at && !thread.locked_at;
+
+if (!editable) return new Response('Not Found', { status: 404 });
+
+let formError: string | null = null;
+let body = reply.body;
+
+if (Astro.request.method === 'POST') {
+  let form: FormData | null = null;
+  try {
+    form = await Astro.request.formData();
+  } catch {
+    formError = 'Submission could not be parsed.';
+  }
+  if (form) {
+    body = String(form.get('body') ?? '').trim();
+    if (body.length < 1 || body.length > 10000) {
+      formError = 'Reply must be 1–10,000 characters.';
+    } else {
+      const { error } = await supabase.rpc('rpc_edit_reply', {
+        p_id: reply.id,
+        p_body: body,
+      });
+      if (error) {
+        if (/edit_forbidden/.test(error.message)) {
+          formError = 'Edit window has closed or the reply was removed.';
+        } else if (/rate_limit_exceeded/.test(error.message)) {
+          formError = 'Too many edits. Wait a moment.';
+        } else {
+          console.error('[reply edit] rpc_edit_reply:', error.message);
+          formError = 'Edit failed. Try again.';
+        }
+      } else {
+        return Astro.redirect(`/community/${thread.slug}#reply-${reply.id}`);
+      }
+    }
+  }
+}
+
+const msLeft =
+  new Date(reply.created_at).getTime() + 10 * 60 * 1000 - Date.now();
+const minsLeft = Math.max(0, Math.ceil(msLeft / 60000));
+---
+<BaseLayout title="Edit reply" description="Edit your reply.">
+  <article class="container container--reading">
+    <p class="section-label"><a href={`/community/${thread.slug}`}>← Back to thread</a></p>
+    <h1>Edit reply</h1>
+    <p class="hint">{minsLeft} {minsLeft === 1 ? 'minute' : 'minutes'} left in the edit window.</p>
+    {formError && <p class="error">{formError}</p>}
+    <form method="post" action={`/community/reply/${reply.id}/edit`}>
+      <label for="body">Markdown <span class="hint-inline">(up to 10,000 chars)</span></label>
+      <textarea id="body" name="body" required maxlength="10000" rows="8">{body}</textarea>
+      <div class="actions">
+        <button type="submit">Save</button>
+        <a class="cancel" href={`/community/${thread.slug}`}>Cancel</a>
+      </div>
+    </form>
+  </article>
+</BaseLayout>
+
+<style>
+  h1 {
+    font-family: var(--cj-serif);
+    font-weight: 600;
+    color: var(--cj-pearl);
+    font-size: clamp(2rem, 5vw, 3rem);
+    letter-spacing: 0.02em;
+    margin: 0 0 12px;
+  }
+  .hint {
+    font-family: var(--cj-sans);
+    font-size: 0.8rem;
+    color: var(--cj-quiet);
+    margin: 0 0 24px;
+  }
+  .error {
+    color: var(--cj-pearl);
+    border-left: 2px solid #b85050;
+    padding: 8px 16px;
+    margin: 0 0 16px;
+    font-size: 0.95rem;
+  }
+  form { display: flex; flex-direction: column; gap: 12px; max-width: 720px; }
+  label {
+    font-family: var(--cj-sans);
+    font-size: 0.75rem;
+    color: var(--cj-whisper);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .hint-inline {
+    text-transform: none;
+    letter-spacing: 0.02em;
+    font-size: 0.7rem;
+    color: var(--cj-quiet);
+  }
+  textarea {
+    font-family: var(--cj-sans);
+    font-size: 0.95rem;
+    background: transparent;
+    border: 1px solid var(--cj-shadow);
+    color: var(--cj-pearl);
+    padding: 12px 14px;
+    border-radius: 2px;
+    resize: vertical;
+  }
+  textarea:focus { outline: none; border-color: var(--cj-gold); }
+  .actions { display: flex; gap: 16px; align-items: center; margin-top: 16px; }
+  button {
+    font-family: var(--cj-sans);
+    font-size: 0.85rem;
+    background: var(--cj-gold);
+    color: var(--cj-ink);
+    padding: 12px 18px;
+    border: none;
+    cursor: pointer;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border-radius: 2px;
+  }
+  button:hover { background: var(--cj-gold-bright); }
+  .cancel {
+    font-family: var(--cj-sans);
+    font-size: 0.8rem;
+    color: var(--cj-whisper);
+    letter-spacing: 0.05em;
+    text-decoration: none;
+  }
+  .cancel:hover { color: var(--cj-gold); }
+  .section-label a {
+    color: var(--cj-whisper);
+    text-decoration: none;
+    letter-spacing: 0.25em;
+  }
+  .section-label a:hover { color: var(--cj-gold); }
+</style>
