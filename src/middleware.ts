@@ -96,6 +96,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
   if (method !== 'GET' && method !== 'HEAD') {
     const origin = request.headers.get('origin');
     if (!isAllowedOrigin(origin)) {
+      // Log the rejected Origin so we can diagnose mismatches without
+      // leaking it externally. Strip to a safe prefix in case someone
+      // accidentally pastes a token-bearing string.
+      const safeOrigin = (origin ?? '(none)').slice(0, 120);
+      console.warn('[middleware] Origin reject:', method, pathname, 'origin=', safeOrigin);
       return new Response('Forbidden', { status: 403 });
     }
   }
