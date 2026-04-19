@@ -16,7 +16,9 @@ import { createSupabaseAdminClient } from '../../lib/supabase/admin';
 import { getCallbackUrl } from '../../lib/auth-origin';
 import { hashEmail, hashIp, asByteaLiteral } from '../../lib/identity-hash';
 
-const emailSchema = z.email().trim().toLowerCase();
+// Normalize before validating: trim + lowercase first so pasted values like
+// "  User@Example.com  " reach z.email() already canonical.
+const emailSchema = z.string().trim().toLowerCase().pipe(z.email());
 
 const url = new URL(Astro.request.url);
 const reason = url.searchParams.get('reason');

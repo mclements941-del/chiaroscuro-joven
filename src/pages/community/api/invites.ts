@@ -19,8 +19,10 @@ import { createSupabaseServerClient } from '../../../lib/supabase/server';
 import { createSupabaseAdminClient } from '../../../lib/supabase/admin';
 import { getCallbackUrl } from '../../../lib/auth-origin';
 
+// Normalize before validating so body like { "email": " User@Example.COM " }
+// reaches z.email() already canonical.
 const bodySchema = z.object({
-  email: z.email().trim().toLowerCase(),
+  email: z.string().trim().toLowerCase().pipe(z.email()),
 });
 
 function json(status: number, body: unknown): Response {

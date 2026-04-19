@@ -27,18 +27,44 @@ const SESSION_ONLY_PATHS = new Set([
   '/community/probe/',
 ]);
 
+// Path buckets that are NOT affected by FORUM_ENABLED — they enforce their
+// own membership/admin rules unconditionally. These must be classified
+// before the flag-dependent fallback.
+
+function isInviteApi(p: string): boolean {
+  return p === '/community/api/invites' || p === '/community/api/invites/' || p.startsWith('/community/api/invites/');
+}
+
+function isAdminApi(p: string): boolean {
+  return p.startsWith('/community/api/admin/') || isInviteApi(p);
+}
+
+function isMemberApi(p: string): boolean {
+  // Everything under /community/api/** that isn't explicitly admin-guarded.
+  return p.startsWith('/community/api/');
+}
+
+function isProfile(p: string): boolean {
+  return p.startsWith('/community/profile');
+}
+
 function classifyRoute(pathname: string, forumEnabled: boolean): Bucket | null {
   if (!pathname.startsWith('/community')) return null;
+
+  // Unconditional routes (flag-independent).
   if (PUBLIC_PATHS.has(pathname)) return 'public';
   if (SESSION_ONLY_PATHS.has(pathname)) return 'session';
   if (pathname.startsWith('/community/admin')) return 'admin';
-  // Flag-dependent: /community and all other /community/** routes
-  // (e.g., /community/new, /community/[slug], /community/profile/setup).
-  // When FORUM_ENABLED=false they render a placeholder under the Public
-  // bucket; when true they move to Members.
+  if (isAdminApi(pathname)) return 'admin';
+  if (isMemberApi(pathname)) return 'member';
+  if (isProfile(pathname)) return 'member';
+
+  // Flag-dependent forum surface (IMPL-0003 D29). With FORUM_ENABLED=false
+  // these render the placeholder; with true they become Members-gated.
   if (pathname === '/community' || pathname === '/community/') {
     return forumEnabled ? 'member' : 'public';
   }
+  // /community/new, /community/[slug], and other Phase 4+ public forum pages.
   return forumEnabled ? 'member' : 'public';
 }
 
@@ -99,6 +125,19 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // Member + Admin buckets require active membership.
   if (!profile?.forum_joined_at) {
     return context.redirect('/community/login?reason=not_member');
+  }
+
+  // Force first-time profile setup on every member/admin route except the
+  // setup page itself and logout. A user who closes their browser tab after
+  // callback lands on /profile/setup should not be able to skip setup by
+  // navigating to /community directly.
+  if (profile.needs_setup) {
+    const isSetup =
+      pathname === '/community/profile/setup' ||
+      pathname === '/community/profile/setup/';
+    if (!isSetup && !isLogout) {
+      return context.redirect('/community/profile/setup');
+    }
   }
 
   // Admin: non-admin → 404 (don't advertise existence of admin surface).
