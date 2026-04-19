@@ -1,15 +1,27 @@
 ---
-// Phase 1 login page. GET renders the form; POST is stubbed until Phase 3
-// implements the rate-limit-checked magic-link flow.
+// /community/login — GET renders a magic-link request form.
+// POST triggers the uniform-response magic-link flow (D44):
+//   1. Handler-side email normalization + zod validate
+//   2. Pre-auth rate-limit via rpc_check_auth_rate_limit (service-role)
+//   3. signInWithOtp({ shouldCreateUser: false, emailRedirectTo: getCallbackUrl() })
+//   4. Always return the same "check your email if eligible" response,
+//      regardless of whether the address exists, is banned, or is unjoined.
 //
-// For Phase 1 end-to-end testing, issue invites via the Supabase dashboard
-// or a scratch Node script calling auth.admin.inviteUserByEmail — that
-// delivers the email which hits /auth/confirm → POST /auth/callback.
+// Phase 6 will layer CSRF + Origin enforcement on top of this endpoint.
 
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { z } from 'zod';
+import { createSupabaseServerClient } from '../../lib/supabase/server';
+import { createSupabaseAdminClient } from '../../lib/supabase/admin';
+import { getCallbackUrl } from '../../lib/auth-origin';
+import { hashEmail, hashIp, asByteaLiteral } from '../../lib/identity-hash';
+
+const emailSchema = z.email().trim().toLowerCase();
 
 const url = new URL(Astro.request.url);
 const reason = url.searchParams.get('reason');
+const status = url.searchParams.get('status');
+
 const reasonNotice =
   reason === 'not_member'
     ? "That sign-in link isn't associated with an active membership."
@@ -17,11 +29,70 @@ const reasonNotice =
     ? 'This account is no longer active.'
     : null;
 
+const submittedNotice =
+  status === 'check_email'
+    ? "If that email is associated with an account, we've sent a sign-in link."
+    : null;
+
 if (Astro.request.method === 'POST') {
-  return new Response(
-    'Login POST is scheduled for Phase 3. Use admin invite for Phase 1 testing.',
-    { status: 501, headers: { 'content-type': 'text/plain' } },
-  );
+  let form: FormData;
+  try {
+    form = await Astro.request.formData();
+  } catch {
+    // Malformed body (wrong Content-Type, unparseable, etc.) — uniform
+    // response; don't leak parser details to the client.
+    return Astro.redirect('/community/login?status=check_email');
+  }
+  const rawEmail = String(form.get('email') ?? '');
+
+  const parsed = emailSchema.safeParse(rawEmail);
+  if (!parsed.success) {
+    // D44: no format error leakage — uniform response even on invalid input.
+    return Astro.redirect('/community/login?status=check_email');
+  }
+  const email = parsed.data;
+
+  // Pre-auth rate-limit (service-role). On breach, 429 is the ONLY
+  // differentiating response; every other path returns the uniform message.
+  const admin = createSupabaseAdminClient();
+  const emailHashBytea = asByteaLiteral(hashEmail(email));
+  const ipHashBytea = asByteaLiteral(hashIp(Astro.clientAddress));
+
+  const { error: rateErr } = await admin.rpc('rpc_check_auth_rate_limit', {
+    p_email_hash: emailHashBytea,
+    p_ip_hash: ipHashBytea,
+    p_kind: 'magic_link',
+    p_max_email: 3,
+    p_max_ip: 10,
+    p_window_secs: 3600,
+  });
+  if (rateErr) {
+    if (rateErr.message.includes('rate_limit_exceeded')) {
+      return new Response('Too many sign-in attempts. Try again in an hour.', {
+        status: 429,
+      });
+    }
+    console.error('[login POST] rate-limit rpc error:', rateErr.message);
+    // Fall through to uniform response — don't leak internal errors.
+  }
+
+  // Fire the OTP. Errors (unknown email, ineligible, transport) swallowed.
+  const supabase = createSupabaseServerClient(Astro.cookies);
+  try {
+    const { error: otpErr } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: getCallbackUrl(),
+      },
+    });
+    if (otpErr) console.error('[login POST] signInWithOtp:', otpErr.message);
+  } catch (err) {
+    console.error('[login POST] signInWithOtp threw:', err);
+  }
+
+  // Uniform response. Best-effort constant timing.
+  return Astro.redirect('/community/login?status=check_email');
 }
 ---
 <BaseLayout title="Sign in" description="Sign in to Chiaroscuro Joven.">
@@ -29,14 +100,19 @@ if (Astro.request.method === 'POST') {
     <p class="section-label">Community</p>
     <h1>Sign in</h1>
     {reasonNotice && <p class="notice">{reasonNotice}</p>}
-    <p class="intro">
-      Enter your email. If your account is eligible, a sign-in link will arrive shortly.
-    </p>
-    <form method="post" action="/community/login">
-      <label for="email">Email</label>
-      <input id="email" name="email" type="email" required autocomplete="email" />
-      <button type="submit">Send sign-in link</button>
-    </form>
+    {submittedNotice && <p class="notice notice--info">{submittedNotice}</p>}
+    {!submittedNotice && (
+      <>
+        <p class="intro">
+          Enter your email. If your account is eligible, a sign-in link will arrive shortly.
+        </p>
+        <form method="post" action="/community/login">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" required autocomplete="email" />
+          <button type="submit">Send sign-in link</button>
+        </form>
+      </>
+    )}
   </section>
 </BaseLayout>
 
@@ -56,6 +132,7 @@ if (Astro.request.method === 'POST') {
     margin: 16px 0;
     font-size: 0.95rem;
   }
+  .notice--info { border-left-color: var(--cj-gold); color: var(--cj-cream); }
   form {
     margin-top: 24px;
     display: flex;

@@ -41,6 +41,10 @@ declare global {
     readonly SUPABASE_URL?: string;
     readonly SUPABASE_ANON_KEY?: string;
     readonly SUPABASE_SERVICE_ROLE_KEY?: string;
+    readonly IDENTITY_HASH_PEPPER?: string;
+    readonly CSRF_SECRET?: string;
+    readonly FORUM_ENABLED?: string;
+    readonly SITE_URL?: string;
   }
 
   interface ImportMeta {

@@ -1,0 +1,157 @@
+---
+// /community/profile/setup — edit display_name + bio.
+// Members-bucket route (middleware enforces forum_joined_at).
+// On first-login (needs_setup=true), the page is required; submission
+// clears the flag and redirects to /community. On subsequent visits,
+// the form edits existing values.
+
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { createSupabaseServerClient } from '../../../lib/supabase/server';
+
+const profile = Astro.locals.profile;
+if (!profile) {
+  // Middleware should have redirected; belt-and-suspenders.
+  return Astro.redirect('/community/login');
+}
+
+let formError: string | null = null;
+let saved = false;
+
+if (Astro.request.method === 'POST') {
+  let form: FormData | null = null;
+  try {
+    form = await Astro.request.formData();
+  } catch {
+    formError = 'Submission could not be parsed. Please resubmit.';
+  }
+
+  if (form) {
+    const displayName = String(form.get('display_name') ?? '').trim();
+    const bioInput = String(form.get('bio') ?? '').trim();
+    const bio = bioInput.length > 0 ? bioInput : null;
+
+    const supabase = createSupabaseServerClient(Astro.cookies);
+    const { error } = await supabase.rpc('rpc_update_profile', {
+      p_display_name: displayName,
+      p_bio: bio,
+    });
+
+    if (error) {
+      if (error.message.includes('invalid_display_name')) {
+        formError = 'Display name must be 2–40 characters.';
+      } else if (error.message.includes('invalid_bio')) {
+        formError = 'Bio must be 280 characters or fewer.';
+      } else if (error.message.includes('rate_limit_exceeded')) {
+        formError = 'Too many updates. Try again later.';
+      } else {
+        console.error('[profile/setup] rpc_update_profile:', error.message);
+        formError = 'Update failed. Try again.';
+      }
+    } else {
+      saved = true;
+      // First-time setup completes → go to /community.
+      if (profile.needs_setup) {
+        return Astro.redirect('/community');
+      }
+    }
+  }
+}
+
+// Re-read profile post-save so the form shows the updated values.
+const current = profile;
+---
+<BaseLayout title="Your profile" description="Edit your Chiaroscuro Joven profile.">
+  <section class="container container--reading">
+    <p class="section-label">Community · Profile</p>
+    <h1>{current.needs_setup ? 'Welcome' : 'Edit profile'}</h1>
+    {current.needs_setup && (
+      <p class="intro">
+        Before you dive in, pick a display name that others will see on your posts.
+      </p>
+    )}
+    {saved && !current.needs_setup && (
+      <p class="notice notice--info">Saved.</p>
+    )}
+    {formError && <p class="notice notice--error">{formError}</p>}
+    <form method="post" action="/community/profile/setup">
+      <label for="display_name">Display name</label>
+      <input
+        id="display_name"
+        name="display_name"
+        type="text"
+        required
+        minlength="2"
+        maxlength="40"
+        value={current.display_name}
+      />
+      <label for="bio">Bio <span class="hint">(optional, 280 chars)</span></label>
+      <textarea id="bio" name="bio" maxlength="280" rows="3"></textarea>
+      <button type="submit">{current.needs_setup ? 'Continue' : 'Save'}</button>
+    </form>
+  </section>
+</BaseLayout>
+
+<style>
+  h1 {
+    font-family: var(--cj-serif);
+    font-weight: 600;
+    color: var(--cj-pearl);
+    font-size: clamp(2.5rem, 6vw, 4.5rem);
+    letter-spacing: 0.04em;
+  }
+  .intro { color: var(--cj-muted); margin: 16px 0 24px; }
+  .notice {
+    padding: 8px 16px;
+    margin: 16px 0;
+    font-size: 0.95rem;
+    border-left: 2px solid var(--cj-shadow);
+    color: var(--cj-whisper);
+  }
+  .notice--info { border-left-color: var(--cj-gold); color: var(--cj-cream); }
+  .notice--error { border-left-color: #b85050; color: var(--cj-pearl); }
+  form {
+    margin-top: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 520px;
+  }
+  label {
+    font-family: var(--cj-sans);
+    font-size: 0.75rem;
+    color: var(--cj-whisper);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .hint {
+    text-transform: none;
+    letter-spacing: 0.02em;
+    font-size: 0.7rem;
+    color: var(--cj-quiet);
+  }
+  input, textarea {
+    font-family: var(--cj-serif);
+    font-size: 1.05rem;
+    background: transparent;
+    border: 1px solid var(--cj-shadow);
+    color: var(--cj-pearl);
+    padding: 12px 14px;
+    border-radius: 2px;
+  }
+  textarea { resize: vertical; font-family: var(--cj-sans); font-size: 0.95rem; }
+  input:focus, textarea:focus { outline: none; border-color: var(--cj-gold); }
+  button {
+    font-family: var(--cj-sans);
+    font-size: 0.85rem;
+    background: var(--cj-gold);
+    color: var(--cj-ink);
+    padding: 12px 18px;
+    border: none;
+    cursor: pointer;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border-radius: 2px;
+    align-self: start;
+  }
+  button:hover { background: var(--cj-gold-bright); }
+</style>

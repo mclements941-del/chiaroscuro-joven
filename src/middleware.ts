@@ -1,9 +1,8 @@
-// Phase 1 middleware: route bucket classification + session load.
-// Phase 2 will add profile query for banned/joined/admin enforcement
-// (the `profiles` table does not exist yet at Phase 1 time).
-// Phase 6 will add CSRF double-submit cookie + Origin allowlist check.
+// Phase 3 middleware: route bucket classification + session load + profile
+// load + banned/joined/admin enforcement (D18 + D29 + D32 + D41).
+// Phase 6 will add CSRF double-submit cookie + Origin allowlist checks.
 //
-// IMPL-0003 §4 (Middleware route classes) + §8 D18/D29/D35.
+// IMPL-0003 §4 (Middleware route classes) + §8 D18/D29/D32/D35/D41.
 // FORUM_ENABLED read via process.env at request time (D35); flip requires
 // a new Vercel deployment per Vercel's env semantics.
 
@@ -74,16 +73,38 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   locals.user = user;
 
-  // Phase 2 will add:
-  //   - profile load from `profiles` table
-  //   - banned_at check (D32): sign out + redirect to ?reason=account_closed
-  //     (except on /community/auth/logout, which always proceeds)
-  //   - forum_joined_at check for member/admin buckets
-  //   - is_admin check for admin bucket (404 on non-admin, not 403)
-  //
-  // For Phase 1 exit-gate purposes, session presence is enough to serve
-  // /probe and /auth/logout. The invite + return-login flow (Phase 3)
-  // depends on the schema landing first in Phase 2.
+  // Load profile (own row via profiles_select_self RLS policy).
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, display_name, is_admin, banned_at, needs_setup, forum_joined_at')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  locals.profile = profile ?? null;
+
+  // Banned check (D32). /community/auth/logout proceeds regardless so a
+  // banned user can still complete their logout flow; every other protected
+  // route signs them out and redirects.
+  const isLogout =
+    pathname === '/community/auth/logout' || pathname === '/community/auth/logout/';
+  if (profile?.banned_at && !isLogout) {
+    await supabase.auth.signOut();
+    return context.redirect('/community/login?reason=account_closed');
+  }
+
+  // Session-only bucket (/probe, /auth/logout) needs session but not
+  // membership. Callback grants membership on first invite consumption.
+  if (bucket === 'session') return next();
+
+  // Member + Admin buckets require active membership.
+  if (!profile?.forum_joined_at) {
+    return context.redirect('/community/login?reason=not_member');
+  }
+
+  // Admin: non-admin → 404 (don't advertise existence of admin surface).
+  if (bucket === 'admin' && !profile.is_admin) {
+    return new Response('Not Found', { status: 404 });
+  }
 
   return next();
 });
