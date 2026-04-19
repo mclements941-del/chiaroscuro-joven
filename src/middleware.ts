@@ -82,24 +82,31 @@ function classifyRoute(pathname: string, forumEnabled: boolean): Bucket | null {
 export const onRequest = defineMiddleware(async (context, next) => {
   const { url, cookies, locals, request } = context;
   const pathname = url.pathname;
+  const method = request.method;
 
   locals.user = null;
   locals.profile = null;
   locals.csrfToken = '';
 
-  if (!pathname.startsWith('/community')) return next();
-
-  // Always mint/refresh the CSRF cookie on /community/** — makes forms on
-  // login, probe, confirm, callback, member, admin pages all work.
-  locals.csrfToken = getOrSetCsrfCookie(cookies);
-
-  // Non-GET pre-flight: Origin allowlist + CSRF double-submit.
-  const method = request.method;
+  // Site-wide Origin check on non-GET. Replaces Astro's built-in
+  // security.checkOrigin (disabled in astro.config.mjs). Covers the
+  // /community/** mutation surface AND any future SSR mutation route
+  // outside /community. Exact-match + preview wildcard; missing Origin
+  // is rejected. See src/lib/origin-allowlist.ts.
   if (method !== 'GET' && method !== 'HEAD') {
     const origin = request.headers.get('origin');
     if (!isAllowedOrigin(origin)) {
       return new Response('Forbidden', { status: 403 });
     }
+  }
+
+  if (!pathname.startsWith('/community')) return next();
+
+  // /community/** only: mint/refresh CSRF cookie so every form can embed it.
+  locals.csrfToken = getOrSetCsrfCookie(cookies);
+
+  // /community/** CSRF double-submit check on non-GET (except callback, D36).
+  if (method !== 'GET' && method !== 'HEAD') {
     if (!CSRF_EXEMPT_NONGET.has(pathname)) {
       const csrf = await validateCsrfRequest(request, cookies);
       if (!csrf.ok) {
