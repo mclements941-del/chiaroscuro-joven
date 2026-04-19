@@ -17,6 +17,13 @@ declare global {
     interface Locals {
       user: User | null;
       profile: ForumProfile | null;
+      /**
+       * CSRF double-submit token for the current request. Minted by
+       * middleware on every /community/** request; empty string outside
+       * /community/**. Pages with forms should render it as a hidden
+       * input with name="cj_csrf".
+       */
+      csrfToken: string;
     }
   }
 

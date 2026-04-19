@@ -1,13 +1,19 @@
-// Phase 3 middleware: route bucket classification + session load + profile
-// load + banned/joined/admin enforcement (D18 + D29 + D32 + D41).
-// Phase 6 will add CSRF double-submit cookie + Origin allowlist checks.
+// Phase 3 middleware + Phase 6 CSRF/Origin (IMPL-0003 §4 + D12 + D18 +
+// D20 + D29 + D32 + D35 + D36 + D41).
 //
-// IMPL-0003 §4 (Middleware route classes) + §8 D18/D29/D32/D35/D41.
+// Request lifecycle for /community/**:
+//   1. Mint/refresh the CSRF cookie so every rendered form can include it.
+//   2. On non-GET (except /community/auth/callback — D36): validate
+//      Origin allowlist, then validate CSRF double-submit.
+//   3. Classify route bucket and enforce auth/membership/admin.
+//
 // FORUM_ENABLED read via process.env at request time (D35); flip requires
 // a new Vercel deployment per Vercel's env semantics.
 
 import { defineMiddleware } from 'astro:middleware';
 import { createSupabaseServerClient } from './lib/supabase/server';
+import { getOrSetCsrfCookie, validateCsrfRequest } from './lib/csrf';
+import { isAllowedOrigin } from './lib/origin-allowlist';
 
 type Bucket = 'public' | 'session' | 'member' | 'admin';
 
@@ -27,12 +33,22 @@ const SESSION_ONLY_PATHS = new Set([
   '/community/probe/',
 ]);
 
-// Path buckets that are NOT affected by FORUM_ENABLED — they enforce their
-// own membership/admin rules unconditionally. These must be classified
-// before the flag-dependent fallback.
+// Paths exempt from CSRF enforcement on non-GET. `/community/auth/callback`
+// is the only one — it's a POST where the browser arrives with a
+// `token_hash` from the confirm interstitial that is itself proof of
+// possession (D36). No cookie existed before the callback so double-submit
+// is impossible there. Origin allowlist STILL applies to the callback.
+const CSRF_EXEMPT_NONGET = new Set([
+  '/community/auth/callback',
+  '/community/auth/callback/',
+]);
 
 function isInviteApi(p: string): boolean {
-  return p === '/community/api/invites' || p === '/community/api/invites/' || p.startsWith('/community/api/invites/');
+  return (
+    p === '/community/api/invites' ||
+    p === '/community/api/invites/' ||
+    p.startsWith('/community/api/invites/')
+  );
 }
 
 function isAdminApi(p: string): boolean {
@@ -40,7 +56,6 @@ function isAdminApi(p: string): boolean {
 }
 
 function isMemberApi(p: string): boolean {
-  // Everything under /community/api/** that isn't explicitly admin-guarded.
   return p.startsWith('/community/api/');
 }
 
@@ -51,7 +66,6 @@ function isProfile(p: string): boolean {
 function classifyRoute(pathname: string, forumEnabled: boolean): Bucket | null {
   if (!pathname.startsWith('/community')) return null;
 
-  // Unconditional routes (flag-independent).
   if (PUBLIC_PATHS.has(pathname)) return 'public';
   if (SESSION_ONLY_PATHS.has(pathname)) return 'session';
   if (pathname.startsWith('/community/admin')) return 'admin';
@@ -59,38 +73,51 @@ function classifyRoute(pathname: string, forumEnabled: boolean): Bucket | null {
   if (isMemberApi(pathname)) return 'member';
   if (isProfile(pathname)) return 'member';
 
-  // Flag-dependent forum surface (IMPL-0003 D29). With FORUM_ENABLED=false
-  // these render the placeholder; with true they become Members-gated.
   if (pathname === '/community' || pathname === '/community/') {
     return forumEnabled ? 'member' : 'public';
   }
-  // /community/new, /community/[slug], and other Phase 4+ public forum pages.
   return forumEnabled ? 'member' : 'public';
 }
 
 export const onRequest = defineMiddleware(async (context, next) => {
-  const { url, cookies, locals } = context;
+  const { url, cookies, locals, request } = context;
   const pathname = url.pathname;
 
-  // Initialize locals for every request so page code can read them without
-  // defensive undefined checks.
   locals.user = null;
   locals.profile = null;
+  locals.csrfToken = '';
 
   if (!pathname.startsWith('/community')) return next();
+
+  // Always mint/refresh the CSRF cookie on /community/** — makes forms on
+  // login, probe, confirm, callback, member, admin pages all work.
+  locals.csrfToken = getOrSetCsrfCookie(cookies);
+
+  // Non-GET pre-flight: Origin allowlist + CSRF double-submit.
+  const method = request.method;
+  if (method !== 'GET' && method !== 'HEAD') {
+    const origin = request.headers.get('origin');
+    if (!isAllowedOrigin(origin)) {
+      return new Response('Forbidden', { status: 403 });
+    }
+    if (!CSRF_EXEMPT_NONGET.has(pathname)) {
+      const csrf = await validateCsrfRequest(request, cookies);
+      if (!csrf.ok) {
+        // Don't leak which check failed externally; log for diagnosis.
+        console.warn('[middleware] CSRF reject:', csrf.reason, pathname);
+        return new Response('Forbidden', { status: 403 });
+      }
+    }
+  }
 
   const forumEnabled = process.env.FORUM_ENABLED === 'true';
   const bucket = classifyRoute(pathname, forumEnabled);
   if (bucket === null || bucket === 'public') return next();
 
-  // Session-bound client for session/member/admin buckets.
   const supabase = createSupabaseServerClient(cookies);
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
-    // IMPL-0003 §7 Phase 1 AC: `/community/probe` returns 401 unauthed
-    // (rather than redirecting) so smoke tests can detect the auth gate
-    // programmatically. All other protected routes redirect to login.
     if (pathname === '/community/probe' || pathname === '/community/probe/') {
       return new Response('Unauthorized', { status: 401 });
     }
@@ -99,7 +126,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   locals.user = user;
 
-  // Load profile (own row via profiles_select_self RLS policy).
   const { data: profile } = await supabase
     .from('profiles')
     .select('id, display_name, bio, is_admin, banned_at, needs_setup, forum_joined_at')
@@ -108,9 +134,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   locals.profile = profile ?? null;
 
-  // Banned check (D32). /community/auth/logout proceeds regardless so a
-  // banned user can still complete their logout flow; every other protected
-  // route signs them out and redirects.
   const isLogout =
     pathname === '/community/auth/logout' || pathname === '/community/auth/logout/';
   if (profile?.banned_at && !isLogout) {
@@ -118,19 +141,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return context.redirect('/community/login?reason=account_closed');
   }
 
-  // Session-only bucket (/probe, /auth/logout) needs session but not
-  // membership. Callback grants membership on first invite consumption.
   if (bucket === 'session') return next();
 
-  // Member + Admin buckets require active membership.
   if (!profile?.forum_joined_at) {
     return context.redirect('/community/login?reason=not_member');
   }
 
-  // Force first-time profile setup on every member/admin route except the
-  // setup page itself and logout. A user who closes their browser tab after
-  // callback lands on /profile/setup should not be able to skip setup by
-  // navigating to /community directly.
   if (profile.needs_setup) {
     const isSetup =
       pathname === '/community/profile/setup' ||
@@ -140,7 +156,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
-  // Admin: non-admin → 404 (don't advertise existence of admin surface).
   if (bucket === 'admin' && !profile.is_admin) {
     return new Response('Not Found', { status: 404 });
   }

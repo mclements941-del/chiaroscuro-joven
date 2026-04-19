@@ -110,6 +110,7 @@ if (Astro.request.method === 'POST') {
     {notice && <p class="notice notice--info">{notice}</p>}
     {formError && <p class="notice notice--error">{formError}</p>}
     <form method="post" action="/community/admin/invites/new">
+      <input type="hidden" name="cj_csrf" value={Astro.locals.csrfToken} />
       <label for="email">Email</label>
       <input
         id="email"

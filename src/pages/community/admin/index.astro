@@ -134,6 +134,7 @@ function truncate(s: string, n: number): string {
                 <td class="right">
                   {canRevoke ? (
                     <form method="post" action="/community/api/admin/revoke-invite" class="inline-form">
+                      <input type="hidden" name="cj_csrf" value={Astro.locals.csrfToken} />
                       <input type="hidden" name="invite_id" value={i.id} />
                       <button type="submit" class="btn-danger">Revoke</button>
                     </form>
@@ -177,6 +178,7 @@ function truncate(s: string, n: number): string {
               <td>{m.is_admin ? <span class="status active">admin</span> : 'member'}</td>
               <td class="right">
                 <form method="post" action="/community/api/admin/ban" class="inline-form" onsubmit="return confirm('Ban this member? This is one-way in v1.')">
+                  <input type="hidden" name="cj_csrf" value={Astro.locals.csrfToken} />
                   <input type="hidden" name="user_id" value={m.id} />
                   <button type="submit" class="btn-danger">Ban</button>
                 </form>

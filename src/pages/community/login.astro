@@ -109,6 +109,7 @@ if (Astro.request.method === 'POST') {
           Enter your email. If your account is eligible, a sign-in link will arrive shortly.
         </p>
         <form method="post" action="/community/login">
+          <input type="hidden" name="cj_csrf" value={Astro.locals.csrfToken} />
           <label for="email">Email</label>
           <input id="email" name="email" type="email" required autocomplete="email" />
           <button type="submit">Send sign-in link</button>

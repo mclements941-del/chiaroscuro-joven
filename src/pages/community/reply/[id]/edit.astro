@@ -92,6 +92,7 @@ const minsLeft = Math.max(0, Math.ceil(msLeft / 60000));
     <p class="hint">{minsLeft} {minsLeft === 1 ? 'minute' : 'minutes'} left in the edit window.</p>
     {formError && <p class="error">{formError}</p>}
     <form method="post" action={`/community/reply/${reply.id}/edit`}>
+      <input type="hidden" name="cj_csrf" value={Astro.locals.csrfToken} />
       <label for="body">Markdown <span class="hint-inline">(up to 10,000 chars)</span></label>
       <textarea id="body" name="body" required maxlength="10000" rows="8">{body}</textarea>
       <div class="actions">

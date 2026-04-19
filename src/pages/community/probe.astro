@@ -23,6 +23,7 @@ if (!user) {
       <dt>last_sign_in_at</dt><dd>{user.last_sign_in_at ?? '(never)'}</dd>
     </dl>
     <form method="post" action="/community/auth/logout" class="logout">
+      <input type="hidden" name="cj_csrf" value={Astro.locals.csrfToken} />
       <button type="submit">Sign out</button>
     </form>
   </section>

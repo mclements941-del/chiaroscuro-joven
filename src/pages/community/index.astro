@@ -110,6 +110,7 @@ function pageUrl(p: number): string {
               <a href="/community/profile/setup">Your profile</a>
               {isAdmin && <a href="/community/admin">Admin</a>}
               <form method="post" action="/community/auth/logout" class="inline-form">
+                <input type="hidden" name="cj_csrf" value={Astro.locals.csrfToken} />
                 <button type="submit" class="member-logout">Log out</button>
               </form>
             </span>

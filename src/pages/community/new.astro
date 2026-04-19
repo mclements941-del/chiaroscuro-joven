@@ -91,6 +91,7 @@ if (Astro.request.method === 'POST') {
     <h1>New thread</h1>
     {formError && <p class="error">{formError}</p>}
     <form method="post" action="/community/new">
+      <input type="hidden" name="cj_csrf" value={Astro.locals.csrfToken} />
       <label for="title">Title <span class="hint">(3–140 chars)</span></label>
       <input
         id="title"

@@ -200,6 +200,7 @@ const canLockThread = isAdmin && !thread.locked_at && !thread.deleted_at;
         )}
         {canLockThread && (
           <form method="post" action={`/community/${slug}/lock`} class="inline-form">
+            <input type="hidden" name="cj_csrf" value={Astro.locals.csrfToken} />
             <button type="submit" class="action-btn">Lock</button>
           </form>
         )}
@@ -210,6 +211,7 @@ const canLockThread = isAdmin && !thread.locked_at && !thread.deleted_at;
             class="inline-form"
             onsubmit="return confirm('Delete this thread?')"
           >
+            <input type="hidden" name="cj_csrf" value={Astro.locals.csrfToken} />
             <button type="submit" class="action-btn action-btn--danger">Delete</button>
           </form>
         )}
@@ -242,6 +244,7 @@ const canLockThread = isAdmin && !thread.locked_at && !thread.deleted_at;
                       class="inline-form"
                       onsubmit="return confirm('Delete this reply?')"
                     >
+                      <input type="hidden" name="cj_csrf" value={Astro.locals.csrfToken} />
                       <button type="submit" class="action-link-sm action-link-sm--danger">delete</button>
                     </form>
                   )}
@@ -259,6 +262,7 @@ const canLockThread = isAdmin && !thread.locked_at && !thread.deleted_at;
         <h2>Reply</h2>
         {replyError && <p class="form-error">{replyError}</p>}
         <form method="post" action={`/community/${slug}`}>
+          <input type="hidden" name="cj_csrf" value={Astro.locals.csrfToken} />
           <label for="body">Markdown <span class="hint">(up to 10,000 chars)</span></label>
           <textarea id="body" name="body" required maxlength="10000" rows="6"></textarea>
           <button type="submit">Post reply</button>

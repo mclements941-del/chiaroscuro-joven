@@ -100,6 +100,7 @@ const minsLeft = Math.max(0, Math.ceil(msLeft / 60000));
     <p class="hint">{minsLeft} {minsLeft === 1 ? 'minute' : 'minutes'} left in the edit window.</p>
     {formError && <p class="error">{formError}</p>}
     <form method="post" action={`/community/${slug}/edit`}>
+      <input type="hidden" name="cj_csrf" value={Astro.locals.csrfToken} />
       <label for="title">Title <span class="hint-inline">(3–140 chars)</span></label>
       <input
         id="title"

@@ -76,6 +76,7 @@ const savedNotice =
     {savedNotice && <p class="notice notice--info">Saved.</p>}
     {formError && <p class="notice notice--error">{formError}</p>}
     <form method="post" action="/community/profile/setup">
+      <input type="hidden" name="cj_csrf" value={Astro.locals.csrfToken} />
       <label for="display_name">Display name</label>
       <input
         id="display_name"
