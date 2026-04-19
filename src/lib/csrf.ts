@@ -16,8 +16,10 @@ import type { AstroCookies } from 'astro';
 export const CSRF_COOKIE_NAME = 'cj_csrf';
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
+// Astro dev only populates import.meta.env from .env files; Vercel Functions
+// runtime populates process.env. Read both so the same code works in dev + prod.
 function getSecret(): string {
-  const s = process.env.CSRF_SECRET;
+  const s = import.meta.env.CSRF_SECRET ?? process.env.CSRF_SECRET;
   if (!s || s.length < 16) {
     throw new Error(
       'CSRF_SECRET is missing or too short (need 32-byte random, base64-encoded)',
