@@ -1,7 +1,11 @@
 ---
+// IMPL-0003 D29: this route is flag-dependent-gated by middleware.
+// FORUM_ENABLED=false → placeholder (this file's current content).
+// FORUM_ENABLED=true → thread list (Phase 4 will replace this body).
+// Removed `prerender = true` because middleware does not run on
+// prerendered routes, and the flag-dependent bucket classification
+// requires middleware to execute per request.
 import BaseLayout from '../../layouts/BaseLayout.astro';
-
-export const prerender = true;
 ---
 
 <BaseLayout title="Community" description="Chiaroscuro Joven's community space — opening soon.">

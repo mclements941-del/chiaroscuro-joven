@@ -28,3 +28,7 @@ pnpm-debug.log*
 # jetbrains setting folder
 .idea/
 .vercel
+
+# Claude Code machine-local state (absolute paths, command allowlists).
+# Shared team state like .claude/launch.json can be committed individually.
+.claude/settings.local.json

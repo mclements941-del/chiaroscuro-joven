@@ -1,0 +1,64 @@
+---
+// Phase 1 probe route. Confirms middleware session load works.
+// Not linked from nav — intentional dead-end test path.
+// Survives past Phase 1 for ongoing smoke tests.
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const user = Astro.locals.user;
+if (!user) {
+  return new Response('Unauthorized', { status: 401 });
+}
+---
+<BaseLayout title="Probe" description="Phase 1 auth probe.">
+  <section class="container container--reading">
+    <p class="section-label">Community · Probe</p>
+    <h1>Session OK</h1>
+    <dl class="probe">
+      <dt>id</dt><dd>{user.id}</dd>
+      <dt>email</dt><dd>{user.email}</dd>
+      <dt>aud</dt><dd>{user.aud}</dd>
+      <dt>role</dt><dd>{user.role ?? '(none)'}</dd>
+      <dt>email_confirmed_at</dt><dd>{user.email_confirmed_at ?? '(not confirmed)'}</dd>
+      <dt>last_sign_in_at</dt><dd>{user.last_sign_in_at ?? '(never)'}</dd>
+    </dl>
+    <form method="post" action="/community/auth/logout" class="logout">
+      <button type="submit">Sign out</button>
+    </form>
+  </section>
+</BaseLayout>
+
+<style>
+  h1 {
+    font-family: var(--cj-serif);
+    font-weight: 600;
+    color: var(--cj-pearl);
+    font-size: clamp(2rem, 5vw, 3rem);
+    letter-spacing: 0.04em;
+  }
+  .probe {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85rem;
+    color: var(--cj-cream);
+    margin-top: 32px;
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 8px 24px;
+  }
+  dt { color: var(--cj-whisper); }
+  dd { margin: 0; word-break: break-all; }
+  .logout { margin-top: 32px; }
+  button {
+    font-family: var(--cj-sans);
+    font-size: 0.8rem;
+    background: transparent;
+    color: var(--cj-whisper);
+    padding: 8px 16px;
+    border: 1px solid var(--cj-shadow);
+    cursor: pointer;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border-radius: 2px;
+  }
+  button:hover { color: var(--cj-pearl); border-color: var(--cj-gold); }
+</style>
