@@ -1,0 +1,313 @@
+---
+// /community/[slug] — thread detail + flat reply list + reply form.
+// Members-bucket route (middleware enforces forum_joined_at + not banned).
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { createSupabaseServerClient } from '../../lib/supabase/server';
+import { renderMarkdown } from '../../lib/markdown';
+
+const { slug } = Astro.params;
+if (!slug) return new Response('Not Found', { status: 404 });
+
+const supabase = createSupabaseServerClient(Astro.cookies);
+
+// ──────────────────────────────────────────────────────────────────────────
+// POST: submit a reply. Uses the thread's id (looked up from slug).
+// Redirects to the same URL on success (post-redirect-get) so F5 doesn't
+// re-submit and the render below picks up the new reply.
+// ──────────────────────────────────────────────────────────────────────────
+let replyError: string | null = null;
+
+if (Astro.request.method === 'POST') {
+  let form: FormData | null = null;
+  try {
+    form = await Astro.request.formData();
+  } catch {
+    replyError = 'Submission could not be parsed.';
+  }
+  if (form) {
+    const body = String(form.get('body') ?? '').trim();
+    if (!body) {
+      replyError = 'Reply cannot be empty.';
+    } else if (body.length > 10000) {
+      replyError = 'Reply must be 10,000 characters or fewer.';
+    } else {
+      const { data: threadForReply } = await supabase
+        .from('threads')
+        .select('id, locked_at, deleted_at')
+        .eq('slug', slug)
+        .maybeSingle();
+
+      if (!threadForReply) {
+        return new Response('Thread not found', { status: 404 });
+      }
+
+      const { error } = await supabase.rpc('rpc_create_reply', {
+        p_thread_id: threadForReply.id,
+        p_body: body,
+      });
+      if (error) {
+        if (/rate_limit_exceeded/.test(error.message)) {
+          replyError = 'Posting too fast. Wait a moment.';
+        } else if (/thread_unavailable/.test(error.message)) {
+          replyError = 'This thread is locked or removed.';
+        } else if (/forbidden/.test(error.message)) {
+          replyError = "You can't post to this thread.";
+        } else {
+          replyError = 'Failed to post reply. Try again.';
+          console.error('[thread] rpc_create_reply:', error.message);
+        }
+      } else {
+        return Astro.redirect(`/community/${slug}`);
+      }
+    }
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// GET: load thread + replies, render markdown.
+// ──────────────────────────────────────────────────────────────────────────
+
+type ThreadRow = {
+  id: string;
+  slug: string;
+  title: string;
+  body: string;
+  category_slug: string;
+  created_at: string;
+  reply_count: number;
+  locked_at: string | null;
+  author: { display_name: string } | null;
+};
+
+const { data: threadRaw } = await supabase
+  .from('threads')
+  .select(
+    'id, slug, title, body, category_slug, created_at, reply_count, locked_at, author:author_id(display_name)',
+  )
+  .eq('slug', slug)
+  .maybeSingle();
+
+// Supabase FK expansion types default to array shape; FK is to-one so coerce.
+const thread = threadRaw as unknown as ThreadRow | null;
+if (!thread) {
+  return new Response('Thread not found', { status: 404 });
+}
+
+type ReplyRow = {
+  id: string;
+  body: string;
+  created_at: string;
+  author: { display_name: string } | null;
+};
+
+const { data: replyData } = await supabase
+  .from('replies')
+  .select('id, body, created_at, author:author_id(display_name)')
+  .eq('thread_id', thread.id)
+  .order('created_at', { ascending: true });
+
+const replies: Array<ReplyRow & { bodyHtml: string }> = (
+  (replyData ?? []) as unknown as ReplyRow[]
+).map((r) => ({ ...r, bodyHtml: renderMarkdown(r.body) }));
+
+const threadBodyHtml = renderMarkdown(thread.body);
+const dateFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' });
+---
+<BaseLayout title={thread.title} description="A thread on Chiaroscuro Joven.">
+  <article class="container container--reading thread">
+    <p class="section-label"><a href="/community">← Community</a></p>
+    <h1>{thread.title}</h1>
+    <div class="meta">
+      <span>{thread.author?.display_name ?? 'member'}</span>
+      <span aria-hidden="true">·</span>
+      <span>{dateFmt.format(new Date(thread.created_at))}</span>
+      <span aria-hidden="true">·</span>
+      <span>{thread.category_slug}</span>
+      {thread.locked_at && (
+        <>
+          <span aria-hidden="true">·</span>
+          <span class="locked">locked</span>
+        </>
+      )}
+    </div>
+    <div class="body prose" set:html={threadBodyHtml}></div>
+
+    <section class="replies">
+      <h2>
+        {thread.reply_count} {thread.reply_count === 1 ? 'reply' : 'replies'}
+      </h2>
+      {replies.map((r) => (
+        <article class="reply">
+          <div class="meta">
+            <span>{r.author?.display_name ?? 'member'}</span>
+            <span aria-hidden="true">·</span>
+            <span>{dateFmt.format(new Date(r.created_at))}</span>
+          </div>
+          <div class="body prose" set:html={r.bodyHtml}></div>
+        </article>
+      ))}
+    </section>
+
+    {!thread.locked_at ? (
+      <section class="reply-form">
+        <h2>Reply</h2>
+        {replyError && <p class="form-error">{replyError}</p>}
+        <form method="post" action={`/community/${slug}`}>
+          <label for="body">Markdown <span class="hint">(up to 10,000 chars)</span></label>
+          <textarea id="body" name="body" required maxlength="10000" rows="6"></textarea>
+          <button type="submit">Post reply</button>
+        </form>
+      </section>
+    ) : (
+      <p class="locked-note">This thread is locked. No new replies.</p>
+    )}
+  </article>
+</BaseLayout>
+
+<style>
+  .thread h1 {
+    font-family: var(--cj-serif);
+    font-weight: 600;
+    color: var(--cj-pearl);
+    font-size: clamp(2rem, 5vw, 3rem);
+    letter-spacing: 0.02em;
+    margin: 0 0 12px;
+  }
+  .meta {
+    display: flex;
+    gap: 10px;
+    font-family: var(--cj-sans);
+    font-size: 0.8rem;
+    color: var(--cj-quiet);
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+  .meta .locked { color: var(--cj-gold); }
+  .body.prose { margin-bottom: 48px; }
+  .body.prose :global(p) {
+    font-size: 1.05rem;
+    color: var(--cj-cream);
+  }
+  .body.prose :global(a) {
+    color: var(--cj-gold-bright);
+    text-decoration: underline;
+    text-decoration-color: var(--cj-shadow);
+  }
+  .body.prose :global(code) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.9em;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+  .body.prose :global(pre) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85em;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 12px 16px;
+    overflow-x: auto;
+    border-radius: 2px;
+  }
+  .body.prose :global(blockquote) {
+    border-left: 2px solid var(--cj-shadow);
+    padding-left: 16px;
+    color: var(--cj-muted);
+    margin: 16px 0;
+  }
+
+  .replies h2 {
+    font-family: var(--cj-sans);
+    font-size: 0.8rem;
+    color: var(--cj-whisper);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-weight: 400;
+    margin: 48px 0 24px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--cj-shadow);
+  }
+  .reply {
+    padding: 24px 0;
+    border-bottom: 1px solid var(--cj-shadow);
+  }
+  .reply:last-of-type { border-bottom: none; }
+
+  .reply-form {
+    margin-top: 48px;
+  }
+  .reply-form h2 {
+    font-family: var(--cj-sans);
+    font-size: 0.8rem;
+    color: var(--cj-whisper);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-weight: 400;
+    margin-bottom: 16px;
+  }
+  .reply-form form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .reply-form label {
+    font-family: var(--cj-sans);
+    font-size: 0.75rem;
+    color: var(--cj-whisper);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .hint {
+    text-transform: none;
+    letter-spacing: 0.02em;
+    font-size: 0.7rem;
+    color: var(--cj-quiet);
+  }
+  .reply-form textarea {
+    font-family: var(--cj-sans);
+    font-size: 0.95rem;
+    background: transparent;
+    border: 1px solid var(--cj-shadow);
+    color: var(--cj-pearl);
+    padding: 12px 14px;
+    border-radius: 2px;
+    resize: vertical;
+  }
+  .reply-form textarea:focus { outline: none; border-color: var(--cj-gold); }
+  .reply-form button {
+    font-family: var(--cj-sans);
+    font-size: 0.85rem;
+    background: var(--cj-gold);
+    color: var(--cj-ink);
+    padding: 12px 18px;
+    border: none;
+    cursor: pointer;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border-radius: 2px;
+    align-self: start;
+  }
+  .reply-form button:hover { background: var(--cj-gold-bright); }
+  .form-error {
+    color: var(--cj-pearl);
+    border-left: 2px solid #b85050;
+    padding: 8px 16px;
+    margin: 0 0 16px;
+    font-size: 0.95rem;
+  }
+  .locked-note {
+    font-family: var(--cj-sans);
+    color: var(--cj-muted);
+    font-style: italic;
+    margin-top: 48px;
+    padding: 16px 0;
+    border-top: 1px solid var(--cj-shadow);
+  }
+
+  .section-label a {
+    color: var(--cj-whisper);
+    text-decoration: none;
+    letter-spacing: 0.25em;
+  }
+  .section-label a:hover { color: var(--cj-gold); }
+</style>

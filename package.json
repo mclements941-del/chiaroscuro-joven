@@ -21,11 +21,14 @@
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.3",
     "astro": "^6.1.7",
+    "marked": "^18.0.2",
+    "sanitize-html": "^2.17.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.8",
     "@types/pg": "^8.20.0",
+    "@types/sanitize-html": "^2.16.1",
     "pg": "^8.20.0",
     "typescript": "^5.9.3"
   }

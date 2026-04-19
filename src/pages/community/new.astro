@@ -1,0 +1,202 @@
+---
+// /community/new — new-thread form.
+// Members-bucket route. Submission generates a slug client-side
+// (`title-<base62>`), calls rpc_create_thread, retries on slug collision.
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { z } from 'zod';
+import { createSupabaseServerClient } from '../../lib/supabase/server';
+import { generateSlug } from '../../lib/slug';
+
+const supabase = createSupabaseServerClient(Astro.cookies);
+
+// Fetch categories for the <select>.
+type CategoryRow = { slug: string; name: string };
+const { data: catData } = await supabase
+  .from('categories')
+  .select('slug, name')
+  .order('sort_order');
+const categories = (catData ?? []) as CategoryRow[];
+
+const bodySchema = z.object({
+  title: z.string().trim().min(3).max(140),
+  category: z.string().min(1),
+  body: z.string().trim().min(1).max(20000),
+});
+
+let formError: string | null = null;
+let values = { title: '', category: '', body: '' };
+
+if (Astro.request.method === 'POST') {
+  let form: FormData | null = null;
+  try {
+    form = await Astro.request.formData();
+  } catch {
+    formError = 'Submission could not be parsed.';
+  }
+
+  if (form) {
+    values = {
+      title: String(form.get('title') ?? ''),
+      category: String(form.get('category') ?? ''),
+      body: String(form.get('body') ?? ''),
+    };
+    const parsed = bodySchema.safeParse(values);
+    if (!parsed.success) {
+      formError = 'Title must be 3–140 chars, body 1–20,000 chars, and pick a category.';
+    } else if (!categories.some((c) => c.slug === parsed.data.category)) {
+      formError = 'Pick a valid category.';
+    } else {
+      let lastError = '';
+      // Retry up to 3 times on slug collision (unique constraint) or
+      // slug_reserved (in case slugify happens to hit a reserved stem).
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const slug = generateSlug(parsed.data.title);
+        const { error } = await supabase.rpc('rpc_create_thread', {
+          p_category_slug: parsed.data.category,
+          p_title: parsed.data.title,
+          p_body: parsed.data.body,
+          p_slug: slug,
+        });
+        if (!error) {
+          return Astro.redirect(`/community/${slug}`);
+        }
+        lastError = error.message;
+        if (/duplicate key value violates unique.+slug/i.test(error.message)) {
+          continue; // fresh suffix on retry
+        }
+        if (/slug_reserved/.test(error.message)) {
+          continue; // regenerate; random suffix likely sidesteps reserved stem
+        }
+        // Any other error — stop retrying.
+        break;
+      }
+      if (lastError) {
+        if (/rate_limit_exceeded/.test(lastError)) {
+          formError = 'Posting too fast. Wait 10 minutes between threads.';
+        } else if (/forbidden/.test(lastError)) {
+          formError = "You can't post threads right now.";
+        } else {
+          formError = 'Could not create thread. Try again.';
+          console.error('[new] rpc_create_thread:', lastError);
+        }
+      }
+    }
+  }
+}
+---
+<BaseLayout title="New thread" description="Start a new thread on Chiaroscuro Joven.">
+  <section class="container container--reading">
+    <p class="section-label"><a href="/community">← Community</a></p>
+    <h1>New thread</h1>
+    {formError && <p class="error">{formError}</p>}
+    <form method="post" action="/community/new">
+      <label for="title">Title <span class="hint">(3–140 chars)</span></label>
+      <input
+        id="title"
+        name="title"
+        type="text"
+        required
+        minlength="3"
+        maxlength="140"
+        value={values.title}
+      />
+
+      <label for="category">Category</label>
+      <select id="category" name="category" required>
+        <option value="" disabled selected={!values.category}>Pick one…</option>
+        {categories.map((c) => (
+          <option value={c.slug} selected={values.category === c.slug}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+
+      <label for="body">Body <span class="hint">(markdown, up to 20,000 chars)</span></label>
+      <textarea id="body" name="body" required maxlength="20000" rows="12">{values.body}</textarea>
+
+      <button type="submit">Post thread</button>
+    </form>
+  </section>
+</BaseLayout>
+
+<style>
+  h1 {
+    font-family: var(--cj-serif);
+    font-weight: 600;
+    color: var(--cj-pearl);
+    font-size: clamp(2rem, 5vw, 3rem);
+    letter-spacing: 0.02em;
+    margin: 0 0 24px;
+  }
+  .error {
+    color: var(--cj-pearl);
+    border-left: 2px solid #b85050;
+    padding: 8px 16px;
+    margin: 0 0 16px;
+    font-size: 0.95rem;
+  }
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 720px;
+  }
+  label {
+    font-family: var(--cj-sans);
+    font-size: 0.75rem;
+    color: var(--cj-whisper);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 12px;
+  }
+  .hint {
+    text-transform: none;
+    letter-spacing: 0.02em;
+    font-size: 0.7rem;
+    color: var(--cj-quiet);
+  }
+  input, select, textarea {
+    font-family: var(--cj-serif);
+    font-size: 1.05rem;
+    background: transparent;
+    border: 1px solid var(--cj-shadow);
+    color: var(--cj-pearl);
+    padding: 12px 14px;
+    border-radius: 2px;
+  }
+  textarea {
+    font-family: var(--cj-sans);
+    font-size: 0.95rem;
+    resize: vertical;
+  }
+  select {
+    font-family: var(--cj-sans);
+    font-size: 0.95rem;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--cj-gold);
+  }
+  button {
+    margin-top: 16px;
+    font-family: var(--cj-sans);
+    font-size: 0.85rem;
+    background: var(--cj-gold);
+    color: var(--cj-ink);
+    padding: 12px 18px;
+    border: none;
+    cursor: pointer;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border-radius: 2px;
+    align-self: start;
+  }
+  button:hover { background: var(--cj-gold-bright); }
+  .section-label a {
+    color: var(--cj-whisper);
+    text-decoration: none;
+    letter-spacing: 0.25em;
+  }
+  .section-label a:hover { color: var(--cj-gold); }
+</style>

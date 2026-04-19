@@ -1,25 +1,154 @@
 ---
-// IMPL-0003 D29: this route is flag-dependent-gated by middleware.
-// FORUM_ENABLED=false → placeholder (this file's current content).
-// FORUM_ENABLED=true → thread list (Phase 4 will replace this body).
-// Removed `prerender = true` because middleware does not run on
-// prerendered routes, and the flag-dependent bucket classification
-// requires middleware to execute per request.
-import BaseLayout from '../../layouts/BaseLayout.astro';
----
+// /community — flag-dependent landing (D29):
+//   FORUM_ENABLED=false → placeholder (pre-launch)
+//   FORUM_ENABLED=true  → thread list, category filter, pagination
 
-<BaseLayout title="Community" description="Chiaroscuro Joven's community space — opening soon.">
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { createSupabaseServerClient } from '../../lib/supabase/server';
+
+const forumEnabled = process.env.FORUM_ENABLED === 'true';
+
+type ThreadRow = {
+  id: string;
+  slug: string;
+  title: string;
+  category_slug: string;
+  last_activity_at: string;
+  reply_count: number;
+  author: { display_name: string } | null;
+};
+
+type CategoryRow = { slug: string; name: string };
+
+const PAGE_SIZE = 25;
+const url = new URL(Astro.request.url);
+const pageRaw = parseInt(url.searchParams.get('page') ?? '1', 10);
+const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+const activeCategory = url.searchParams.get('category');
+
+let threads: ThreadRow[] = [];
+let categories: CategoryRow[] = [];
+let hasNext = false;
+let loadError: string | null = null;
+
+if (forumEnabled) {
+  const supabase = createSupabaseServerClient(Astro.cookies);
+
+  const { data: catData } = await supabase
+    .from('categories')
+    .select('slug, name')
+    .order('sort_order');
+  categories = (catData ?? []) as CategoryRow[];
+
+  let query = supabase
+    .from('threads')
+    .select(
+      'id, slug, title, category_slug, last_activity_at, reply_count, author:author_id(display_name)',
+    )
+    .order('last_activity_at', { ascending: false })
+    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE); // 26 rows to detect hasNext
+  if (activeCategory) {
+    query = query.eq('category_slug', activeCategory);
+  }
+
+  const { data: threadData, error: threadErr } = await query;
+  if (threadErr) {
+    console.error('[community] threads select:', threadErr.message);
+    loadError = 'Could not load threads. Try again.';
+  } else {
+    // Supabase's FK-expansion types default to array shape because the client
+    // can't prove the FK is unique without typed DB schemas. Our author_id is
+    // a FK to profiles.id (PK), so it's to-one — coerce via unknown.
+    const all = (threadData ?? []) as unknown as ThreadRow[];
+    hasNext = all.length > PAGE_SIZE;
+    threads = all.slice(0, PAGE_SIZE);
+  }
+}
+
+const rtf = new Intl.RelativeTimeFormat('en-US', { numeric: 'auto' });
+function relTime(iso: string): string {
+  const diffMs = new Date(iso).getTime() - Date.now();
+  const mins = Math.round(diffMs / 60000);
+  if (Math.abs(mins) < 60) return rtf.format(mins, 'minute');
+  const hrs = Math.round(diffMs / 3600000);
+  if (Math.abs(hrs) < 24) return rtf.format(hrs, 'hour');
+  const days = Math.round(diffMs / 86400000);
+  return rtf.format(days, 'day');
+}
+
+function pageUrl(p: number): string {
+  const params = new URLSearchParams();
+  if (p !== 1) params.set('page', String(p));
+  if (activeCategory) params.set('category', activeCategory);
+  const qs = params.toString();
+  return qs ? `/community?${qs}` : '/community';
+}
+---
+<BaseLayout title="Community" description="Chiaroscuro Joven's community.">
   <section class="container container--reading">
     <p class="section-label">Community</p>
-    <h1>Opening soon</h1>
-    <p class="placeholder">
-      A space to think alongside others — threaded discussions on art, literature, film, and
-      whatever else catches the light. Built piece by piece, without haste.
-    </p>
-    <p class="placeholder">
-      When the doors open, signup will be an email magic link. No passwords, no tracking, no
-      algorithmic feed.
-    </p>
+    {!forumEnabled ? (
+      <>
+        <h1>Opening soon</h1>
+        <p class="placeholder">
+          A space to think alongside others — threaded discussions on art, literature, film, and
+          whatever else catches the light. Built piece by piece, without haste.
+        </p>
+        <p class="placeholder">
+          When the doors open, signup will be an email magic link. No passwords, no tracking, no
+          algorithmic feed.
+        </p>
+      </>
+    ) : (
+      <>
+        <div class="head">
+          <h1>Threads</h1>
+          <a class="new-btn" href="/community/new">New thread</a>
+        </div>
+        <nav class="cats" aria-label="Categories">
+          <a href="/community" class:list={[{ active: !activeCategory }]}>All</a>
+          {categories.map((c) => (
+            <a
+              href={`/community?category=${c.slug}`}
+              class:list={[{ active: activeCategory === c.slug }]}
+            >
+              {c.name}
+            </a>
+          ))}
+        </nav>
+        {loadError && <p class="error">{loadError}</p>}
+        {threads.length === 0 && !loadError ? (
+          <p class="empty">No threads yet. Start one.</p>
+        ) : (
+          <ul class="thread-list">
+            {threads.map((t) => (
+              <li class="thread">
+                <a href={`/community/${t.slug}`} class="thread-link">
+                  <h2>{t.title}</h2>
+                  <div class="meta">
+                    <span>{t.author?.display_name ?? 'member'}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                      {t.reply_count} {t.reply_count === 1 ? 'reply' : 'replies'}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span>{relTime(t.last_activity_at)}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{t.category_slug}</span>
+                  </div>
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+        {(page > 1 || hasNext) && (
+          <nav class="pager" aria-label="Pagination">
+            {page > 1 ? <a href={pageUrl(page - 1)}>← newer</a> : <span />}
+            {hasNext && <a href={pageUrl(page + 1)}>older →</a>}
+          </nav>
+        )}
+      </>
+    )}
   </section>
 </BaseLayout>
 
@@ -30,11 +159,97 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     color: var(--cj-pearl);
     font-size: clamp(2.5rem, 6vw, 4.5rem);
     letter-spacing: 0.04em;
+    margin: 0;
   }
-
   .placeholder {
     color: var(--cj-muted);
     margin-top: 20px;
     font-size: 1.05rem;
   }
+  .head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .new-btn {
+    font-family: var(--cj-sans);
+    font-size: 0.8rem;
+    background: var(--cj-gold);
+    color: var(--cj-ink);
+    padding: 10px 16px;
+    border: none;
+    text-decoration: none;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border-radius: 2px;
+  }
+  .new-btn:hover { background: var(--cj-gold-bright); }
+  .cats {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--cj-shadow);
+    margin-bottom: 24px;
+  }
+  .cats a {
+    font-family: var(--cj-sans);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--cj-whisper);
+    text-decoration: none;
+  }
+  .cats a.active, .cats a:hover { color: var(--cj-gold); }
+  .thread-list { list-style: none; padding: 0; margin: 0; }
+  .thread { border-bottom: 1px solid var(--cj-shadow); }
+  .thread-link {
+    display: block;
+    padding: 20px 0;
+    color: inherit;
+    text-decoration: none;
+  }
+  .thread-link:hover h2 { color: var(--cj-gold-bright); }
+  .thread h2 {
+    font-family: var(--cj-serif);
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--cj-pearl);
+    margin: 0 0 6px;
+    transition: color 0.2s ease;
+  }
+  .meta {
+    display: flex;
+    gap: 10px;
+    font-family: var(--cj-sans);
+    font-size: 0.8rem;
+    color: var(--cj-quiet);
+    flex-wrap: wrap;
+  }
+  .empty {
+    color: var(--cj-muted);
+    padding: 32px 0;
+    font-style: italic;
+  }
+  .error {
+    color: var(--cj-pearl);
+    border-left: 2px solid #b85050;
+    padding: 8px 16px;
+    margin: 16px 0;
+  }
+  .pager {
+    display: flex;
+    justify-content: space-between;
+    padding: 32px 0;
+  }
+  .pager a {
+    font-family: var(--cj-sans);
+    font-size: 0.85rem;
+    color: var(--cj-whisper);
+    text-decoration: none;
+    letter-spacing: 0.05em;
+  }
+  .pager a:hover { color: var(--cj-gold); }
 </style>
