@@ -75,15 +75,30 @@ await check('all 7 content tables exist in public schema', async () => {
   for (const t of expected) assert(got.has(t), `missing: ${t}`);
 });
 
-await check('categories are seeded (art, literature, film, misc)', async () => {
+await check('categories are seeded (craft, compass, field, formation)', async () => {
+  // Original Phase 2 seed was art/literature/film/misc (0004_forum_seed.sql).
+  // Launch-night migration 0006 replaced them with the community-thesis
+  // categories; migration 0007 refined descriptions. See IMPL-0003 §11
+  // Phase 7 discovery #6 for the rationale. Next revision of categories
+  // updates this assertion.
   const { rows } = await client.query(
-    `select slug from public.categories order by sort_order`,
+    `select slug, name, description from public.categories order by sort_order`,
   );
   const slugs = rows.map((r) => r.slug);
+  const expected = ['craft', 'compass', 'field', 'formation'];
   assert(
-    ['art', 'literature', 'film', 'misc'].every((s) => slugs.includes(s)),
-    `expected art/literature/film/misc, got ${slugs.join(',')}`,
+    expected.every((s) => slugs.includes(s)),
+    `expected ${expected.join('/')}, got ${slugs.join(',')}`,
   );
+  // Migration 0006 added a non-null-content description column. Every
+  // seeded category must have a meaningful description — catches partial
+  // re-seed regressions where slugs land but description copy doesn't.
+  for (const row of rows) {
+    assert(
+      typeof row.description === 'string' && row.description.length >= 20,
+      `category ${row.slug} missing or thin description (${row.description?.length ?? 0} chars)`,
+    );
+  }
 });
 
 // ──────────────────────────────────────────────────────────────────────────
