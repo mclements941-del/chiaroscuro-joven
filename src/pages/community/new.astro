@@ -10,11 +10,11 @@ import { generateSlug } from '../../lib/slug';
 
 const supabase = createSupabaseServerClient(Astro.cookies);
 
-// Fetch categories for the <select>.
-type CategoryRow = { slug: string; name: string };
+// Fetch categories for the <select> plus their descriptions for the guide.
+type CategoryRow = { slug: string; name: string; description: string | null };
 const { data: catData } = await supabase
   .from('categories')
-  .select('slug, name')
+  .select('slug, name, description')
   .order('sort_order');
 const categories = (catData ?? []) as CategoryRow[];
 
@@ -118,6 +118,18 @@ if (Astro.request.method === 'POST') {
 
       <button type="submit">Post thread</button>
     </form>
+
+    <aside class="category-guide" aria-label="Category guide">
+      <p class="guide-head">What goes where</p>
+      <dl>
+        {categories.map((c) => (
+          <>
+            <dt>{c.name}</dt>
+            <dd>{c.description ?? ''}</dd>
+          </>
+        ))}
+      </dl>
+    </aside>
   </section>
 </BaseLayout>
 
@@ -194,6 +206,40 @@ if (Astro.request.method === 'POST') {
     align-self: start;
   }
   button:hover { background: var(--cj-gold-bright); }
+
+  .category-guide {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--cj-shadow);
+    max-width: 720px;
+  }
+  .guide-head {
+    font-family: var(--cj-sans);
+    font-size: 0.75rem;
+    color: var(--cj-whisper);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin: 0 0 16px;
+  }
+  .category-guide dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 12px 24px;
+    margin: 0;
+  }
+  .category-guide dt {
+    font-family: var(--cj-serif);
+    color: var(--cj-pearl);
+    font-size: 1rem;
+  }
+  .category-guide dd {
+    font-family: var(--cj-sans);
+    font-size: 0.9rem;
+    color: var(--cj-muted);
+    margin: 0;
+    line-height: 1.5;
+  }
+
   .section-label a {
     color: var(--cj-whisper);
     text-decoration: none;

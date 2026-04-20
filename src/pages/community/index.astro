@@ -20,7 +20,7 @@ type ThreadRow = {
   author: { display_name: string } | null;
 };
 
-type CategoryRow = { slug: string; name: string };
+type CategoryRow = { slug: string; name: string; description: string | null };
 
 const PAGE_SIZE = 25;
 const url = new URL(Astro.request.url);
@@ -38,7 +38,7 @@ if (forumEnabled) {
 
   const { data: catData } = await supabase
     .from('categories')
-    .select('slug, name')
+    .select('slug, name, description')
     .order('sort_order');
   categories = (catData ?? []) as CategoryRow[];
 
@@ -131,6 +131,12 @@ function pageUrl(p: number): string {
             </a>
           ))}
         </nav>
+        {activeCategory && (() => {
+          const active = categories.find((c) => c.slug === activeCategory);
+          return active?.description ? (
+            <p class="category-description">{active.description}</p>
+          ) : null;
+        })()}
         {loadError && <p class="error">{loadError}</p>}
         {threads.length === 0 && !loadError ? (
           <p class="empty">No threads yet. Start one.</p>
@@ -255,6 +261,14 @@ function pageUrl(p: number): string {
     text-decoration: none;
   }
   .cats a.active, .cats a:hover { color: var(--cj-gold); }
+  .category-description {
+    font-family: var(--cj-sans);
+    font-size: 0.9rem;
+    color: var(--cj-muted);
+    margin: 0 0 24px;
+    max-width: 64ch;
+    line-height: 1.5;
+  }
   .thread-list { list-style: none; padding: 0; margin: 0; }
   .thread { border-bottom: 1px solid var(--cj-shadow); }
   .thread-link {
