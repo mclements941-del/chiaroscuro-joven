@@ -18,11 +18,23 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   check:
     name: Typecheck + Build
     runs-on: ubuntu-latest
+
+    # Astro's build prerenders static routes (home, about, blog, gallery),
+    # and Astro loads middleware during prerender. Middleware imports
+    # src/lib/supabase/server.ts, which calls requireEnv('SUPABASE_URL')
+    # at module-load time. So even the typecheck+build job needs these
+    # two env vars present, or the build fails during prerender.
+    # These come from the same GH Actions secrets as the db-tests job —
+    # unlocking the check job was gated on IMPL-0004 Phase 1's secret push.
+    env:
+      SUPABASE_URL:      ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
     steps:
       - uses: actions/checkout@v4
